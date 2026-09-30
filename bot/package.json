@@ -1,0 +1,24 @@
+{
+  "name": "akadiledu-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for ҰБТ Mathematics learning platform",
+  "main": "index.js",
+  "scripts": {
+    "start": "node start.js",
+    "dev": "node start.js",
+    "webhook:register": "node registerWebhook.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.0",
+    "firebase-admin": "^14.5.0",
+    "grammy": "^1.21.0"
+  },
+  "overrides": {
+    "gaxios": {
+      "uuid": "^11.1.1"
+    }
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  }
+}
