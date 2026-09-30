@@ -1,0 +1,116 @@
+{
+  "rules": {
+    ".read": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()",
+    ".write": false,
+    "users": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "questions": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "questionsByTopic": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "topics": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "subtopics": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "questionsBySubtopic": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "quizSessions": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "activeSessionsByUser": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "attempts": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "attemptsByUser": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "topicAttempts": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "topicAttemptsByUser": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "topicAttemptsByTopic": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "publications": {
+      ".indexOn": ["status"],
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "channelQuizAttempts": {
+      ".indexOn": ["userId"],
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "channelQuizAttemptsByUser": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "channelQuizAttemptsByPublication": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "learningRecords": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "learningRecordsByUser": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "topicWeakness": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "progress": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "progressByUser": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "userStats": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "topicStats": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "campaigns": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "broadcasts": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "materials": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "files": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "settings": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "analytics": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "generationJobs": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "subscriptions": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "referrals": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "duels": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "auditLog": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
+    },
+    "admins": {
+      ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists() && root.child('admins').child(auth.uid).child('role').val() === 'super_admin'"
+    }
+  }
+}

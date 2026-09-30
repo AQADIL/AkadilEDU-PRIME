@@ -1,0 +1,29 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.admin == true;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if isAdmin();
+    }
+
+    match /questions/{questionId}/{allPaths=**} {
+      allow read: if true;
+    }
+
+    match /formulas/{formulaId}/{allPaths=**} {
+      allow read: if true;
+    }
+
+    match /diagrams/{diagramId}/{allPaths=**} {
+      allow read: if true;
+    }
+
+    match /generated/{allPaths=**} {
+      allow read: if true;
+    }
+  }
+}
