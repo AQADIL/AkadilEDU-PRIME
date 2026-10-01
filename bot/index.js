@@ -32,6 +32,47 @@ async function saveUser(ctx) {
   return result.snapshot.val();
 }
 
+async function showBrowserAuthRequest(ctx, requestId) {
+  const id = userId(ctx);
+  const language = await languageFor(ctx);
+  const [admin, request] = await Promise.all([
+    db.ref(`admins/${id}`).once('value'),
+    db.ref(`browserAuthRequests/${requestId}`).once('value'),
+  ]);
+  if (!admin.exists()) return ctx.reply(t(language, 'adminOnly'));
+  const value = request.val();
+  if (!value || value.status !== 'pending' || !Number.isSafeInteger(value.expiresAt)
+    || value.expiresAt <= Date.now() || !/^[A-Z2-9]{6}$/.test(value.displayCode || '')) {
+    return ctx.reply(t(language, 'browserLoginExpired'));
+  }
+  await ctx.reply(t(language, 'browserLoginRequest', value.displayCode), {
+    reply_markup: new InlineKeyboard().text(t(language, 'browserLoginApprove'), `ba:${requestId}`),
+  });
+}
+
+async function approveBrowserAuth(ctx, requestId) {
+  const id = userId(ctx);
+  const language = await languageFor(ctx);
+  const admin = await db.ref(`admins/${id}`).once('value');
+  if (!admin.exists()) {
+    return ctx.answerCallbackQuery({ text: t(language, 'adminOnly'), show_alert: true });
+  }
+
+  const now = Date.now();
+  const result = await transactionExisting(db.ref(`browserAuthRequests/${requestId}`), (current) => {
+    if (!current || current.status !== 'pending' || !Number.isSafeInteger(current.expiresAt)
+      || current.expiresAt <= now) {
+      return;
+    }
+    return { ...current, status: 'approved', approvedBy: id, approvedAt: now };
+  });
+  if (!result.committed) {
+    return ctx.answerCallbackQuery({ text: t(language, 'browserLoginExpired'), show_alert: true });
+  }
+  await ctx.answerCallbackQuery({ text: t(language, 'browserLoginApprovedAlert') });
+  await ctx.editMessageText(t(language, 'browserLoginApproved', result.snapshot.val().displayCode));
+}
+
 function menu(language) {
   return new InlineKeyboard()
     .text(t(language, 'menuRandom'), 'menu:random').row()
@@ -336,8 +377,11 @@ function createBot() {
   bot.command('start', async (ctx) => {
     if (ctx.chat.type !== 'private') return;
     await saveUser(ctx);
-    const match = /^quiz_([a-f0-9]{24})$/.exec(ctx.match?.trim() || '');
-    if (match) await showReview(ctx, match[1]);
+    const payload = ctx.match?.trim() || '';
+    const quizMatch = /^quiz_([a-f0-9]{24})$/.exec(payload);
+    const browserAuthMatch = /^admin_([a-f0-9]{48})$/.exec(payload);
+    if (quizMatch) await showReview(ctx, quizMatch[1]);
+    else if (browserAuthMatch) await showBrowserAuthRequest(ctx, browserAuthMatch[1]);
     else await showMenu(ctx);
   });
   bot.command('help', async (ctx) => { if (ctx.chat.type === 'private') await ctx.reply(t(await languageFor(ctx), 'help')); });
@@ -356,6 +400,9 @@ function createBot() {
   });
   bot.callbackQuery(/^c:([a-f0-9]{24}):(\d{1,4}):([0-7])$/, async (ctx) => {
     await answerChannel(ctx, ctx.match[1], Number(ctx.match[2]), Number(ctx.match[3]));
+  });
+  bot.callbackQuery(/^ba:([a-f0-9]{48})$/, async (ctx) => {
+    await approveBrowserAuth(ctx, ctx.match[1]);
   });
   bot.callbackQuery('menu:random', async (ctx) => { await ctx.answerCallbackQuery(); await startPractice(ctx, 'random'); });
   bot.callbackQuery('menu:topics', async (ctx) => { await ctx.answerCallbackQuery(); await showTopics(ctx); });

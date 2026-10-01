@@ -79,6 +79,16 @@
     "campaigns": {
       ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
     },
+    "browserAuthRequests": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": ["expiresAt"]
+    },
+    "browserAuthRateLimits": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": ["expiresAt"]
+    },
     "broadcasts": {
       ".write": "auth != null && auth.token.admin === true && root.child('admins').child(auth.uid).exists()"
     },

@@ -19,6 +19,10 @@ const translations = Object.freeze({
     finished: 'Жаттығу аяқталды.', finishChannel: 'Бүгінгі викторина аяқталды. Өз қателеріңізді ботта талдаңыз.',
     openReview: 'Қатемен жұмысқа өту', channelQuestion: (n, total) => `🧮 ${n}/${total}`,
     adminOnly: 'Әкімші құқығы қажет.', adminOpen: 'Басқару панелін ашу',
+    browserLoginRequest: (code) => `💻 Браузерден кіру сұрауы\n\nКод: ${code}\n\nЕгер осы код ноутбугыңызда көрсетілсе, кіруді растаңыз.`,
+    browserLoginApprove: 'Кіруді растау', browserLoginApprovedAlert: 'Кіру расталды.',
+    browserLoginApproved: (code) => `✅ ${code} коды үшін браузерден кіру расталды. Бұл терезені жабуға болады.`,
+    browserLoginExpired: 'Бұл кіру сұрауының мерзімі аяқталған немесе ол қолданылып қойған.',
     error: 'Қате орын алды. Кейінірек қайталап көріңіз.', blocked: 'Қолжетімділік шектелген.'
   },
   ru: {
@@ -41,6 +45,10 @@ const translations = Object.freeze({
     finished: 'Практика завершена.', finishChannel: 'Сегодняшняя викторина завершена. Разберите ошибки в боте.',
     openReview: 'Перейти к разбору', channelQuestion: (n, total) => `🧮 ${n}/${total}`,
     adminOnly: 'Нужны права администратора.', adminOpen: 'Открыть панель управления',
+    browserLoginRequest: (code) => `💻 Запрос на вход из браузера\n\nКод: ${code}\n\nЕсли этот код показан на вашем ноутбуке, подтвердите вход.`,
+    browserLoginApprove: 'Подтвердить вход', browserLoginApprovedAlert: 'Вход подтверждён.',
+    browserLoginApproved: (code) => `✅ Вход в браузере с кодом ${code} подтверждён. Это окно можно закрыть.`,
+    browserLoginExpired: 'Запрос на вход истёк или уже был использован.',
     error: 'Произошла ошибка. Попробуйте позже.', blocked: 'Доступ ограничен.'
   },
   en: {
@@ -63,6 +71,10 @@ const translations = Object.freeze({
     finished: 'Practice finished.', finishChannel: "Today's quiz has ended. Review your mistakes in the bot.",
     openReview: 'Open review', channelQuestion: (n, total) => `🧮 ${n}/${total}`,
     adminOnly: 'Administrator access is required.', adminOpen: 'Open admin panel',
+    browserLoginRequest: (code) => `💻 Browser sign-in request\n\nCode: ${code}\n\nIf this code matches the one on your laptop, approve the sign-in.`,
+    browserLoginApprove: 'Approve sign-in', browserLoginApprovedAlert: 'Sign-in approved.',
+    browserLoginApproved: (code) => `✅ Browser sign-in with code ${code} is approved. You can close this window.`,
+    browserLoginExpired: 'This sign-in request has expired or has already been used.',
     error: 'Something went wrong. Please try again later.', blocked: 'Access restricted.'
   }
 });

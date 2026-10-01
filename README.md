@@ -10,6 +10,8 @@ Telegram бот для практики по математике ҰБТ и еж
 
 Админ панель использует проверку подлинного `Telegram.WebApp.initData` на сервере. Только пользователь из `/admins` получает Firebase custom token с ролью администратора. Realtime Database и Storage закрыты для неподтверждённых клиентов; бот и Cloud Functions работают через Firebase Admin SDK.
 
+Из обычного браузера администратор нажимает `Knock through Telegram`. Панель создаёт короткоживущий одноразовый запрос с криптографическим challenge и показывает шестисимвольный код. Бот показывает тот же код и отдельную кнопку подтверждения. После подтверждения браузер получает Firebase custom token; сессия хранится только до закрытия браузерной сессии. Пароли, постоянные коды и публичный доступ к базе для этого не используются.
+
 ## Структура
 
 - `bot/` — обработчики Telegram, переводы `i18n.js`, отбор вопросов, публикации и локальный запуск.
@@ -24,7 +26,7 @@ Telegram бот для практики по математике ҰБТ и еж
 Все значения задаются через окружение. Не добавляйте токены или ключ сервисного аккаунта в исходники.
 
 1. Для локального бота заполните корневой `.env` по `.env.example`. `GOOGLE_APPLICATION_CREDENTIALS` указывает на локальный ключ сервисного аккаунта; в Cloud Functions используется Application Default Credentials.
-2. Для функций заполните `functions/.env` по `functions/.env.example`. `RTDB_URL` и `DEPLOY_REGION` задают базу и регион; префикс `FIREBASE_` и имя `FUNCTION_REGION` зарезервированы Firebase. `SCHEDULER_CRON` должен запускать проверку раз в минуту. Ежедневное время конкретной кампании задаётся в Mini App. `ADMIN_INIT_DATA_MAX_AGE_SECONDS` задаёт допустимый срок подписанных Telegram данных.
+2. Для функций заполните `functions/.env` по `functions/.env.example`. `RTDB_URL` и `DEPLOY_REGION` задают базу и регион; префикс `FIREBASE_` и имя `FUNCTION_REGION` зарезервированы Firebase. `SCHEDULER_CRON` должен запускать проверку раз в минуту. Ежедневное время конкретной кампании задаётся в Mini App. `ADMIN_INIT_DATA_MAX_AGE_SECONDS` задаёт допустимый срок подписанных Telegram данных. Параметры `BROWSER_AUTH_TTL_SECONDS`, `BROWSER_AUTH_RATE_WINDOW_SECONDS`, `BROWSER_AUTH_RATE_MAX` и `BROWSER_AUTH_POLL_INTERVAL_MS` управляют сроком, защитой от частых запросов и интервалом проверки браузерного входа.
 3. Для Mini App заполните `admin-mini-app/.env` по её `.env.example`. `VITE_FIREBASE_FUNCTIONS_REGION` должен совпадать с `DEPLOY_REGION`; `VITE_TELEGRAM_WEB_APP_SCRIPT_URL` указывает на официальный скрипт Telegram Mini Apps.
 4. Секреты `BOT_TOKEN` и `TELEGRAM_WEBHOOK_SECRET` для Cloud Functions задайте в Firebase Secret Manager через `firebase functions:secrets:set`. Не помещайте их в `functions/.env`.
 5. `BOT_DEEP_LINK_BASE_URL` — HTTPS ссылка на бота в Telegram, соответствующая `BOT_USERNAME`. `MINI_APP_URL` — HTTPS адрес панели. `TELEGRAM_WEBHOOK_URL` — опубликованный адрес функции `telegramWebhook`, используется только локальной командой регистрации webhook.

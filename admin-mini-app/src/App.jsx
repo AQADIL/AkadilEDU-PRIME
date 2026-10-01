@@ -13,7 +13,14 @@ const Users = lazy(() => import('./pages/Users'));
 
 function AppContent() {
   const { currentTheme } = useTheme();
-  const { user, loading, error } = useTelegramAuth();
+  const {
+    user,
+    loading,
+    error,
+    browserRequest,
+    startBrowserLogin,
+    cancelBrowserLogin,
+  } = useTelegramAuth();
 
   if (loading) {
     return (
@@ -27,7 +34,14 @@ function AppContent() {
   }
 
   if (error || !user) {
-    return <Login error={error} />;
+    return (
+      <Login
+        error={error}
+        browserRequest={browserRequest}
+        onStartBrowserLogin={startBrowserLogin}
+        onCancelBrowserLogin={cancelBrowserLogin}
+      />
+    );
   }
 
   return (

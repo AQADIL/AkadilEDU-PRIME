@@ -59,6 +59,8 @@ function matchesSecret(headerValue, expectedValue) {
 }
 
 exports.adminAuth = require('./adminAuth').adminAuth;
+exports.beginBrowserAuth = require('./browserAuth').beginBrowserAuth;
+exports.completeBrowserAuth = require('./browserAuth').completeBrowserAuth;
 
 exports.verifyChannel = onCall({
   region: process.env.DEPLOY_REGION,
@@ -141,6 +143,7 @@ exports.campaignScheduler = onSchedule({
 
   const { db } = require('./bot/firebase');
   const { publishDueCampaign, closeDuePublications } = require('./bot/channelScheduler');
+  const { cleanupBrowserAuth } = require('./browserAuth');
   const { Api } = require('grammy');
   const api = new Api(botToken.value());
   const snapshot = await db.ref('campaigns').once('value');
@@ -188,6 +191,13 @@ exports.campaignScheduler = onSchedule({
   } catch (error) {
     logger.error('Publication progression failed', error);
     failures.push('publications');
+  }
+
+  try {
+    await cleanupBrowserAuth(Date.now());
+  } catch (error) {
+    logger.error('Browser authentication cleanup failed', error);
+    failures.push('browserAuthCleanup');
   }
 
   if (failures.length > 0) {
