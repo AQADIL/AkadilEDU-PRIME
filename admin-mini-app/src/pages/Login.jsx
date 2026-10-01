@@ -1,88 +1,105 @@
-import { AlertCircle, KeyRound, LoaderCircle, Send, ShieldCheck, X } from 'lucide-react';
+import { ArrowUpRight, X } from 'lucide-react';
+import './Login.css';
 
 export default function Login({ error, browserRequest, onStartBrowserLogin, onCancelBrowserLogin }) {
   const creating = browserRequest?.status === 'creating';
   const pending = browserRequest?.status === 'pending';
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950 p-4">
-      <div className="w-full max-w-md">
-        {error && (
-          <div className="mb-4 flex items-center gap-3 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-red-100">
-            <AlertCircle className="h-5 w-5 flex-shrink-0" />
-            <p className="text-sm">{error}</p>
-          </div>
-        )}
+    <main className={`login-shell${pending ? ' is-pending' : ''}`}>
+      <header className="login-header">
+        <span className="login-wordmark" translate="no">AkadilEDU</span>
+        <div className="login-header-meta" aria-label="Sign-in context">
+          <span>Admin access</span>
+          <span>Session-only sign in</span>
+        </div>
+      </header>
 
-        <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.07] shadow-2xl shadow-blue-950/40 backdrop-blur-xl">
-          <div className="border-b border-white/10 px-8 py-7 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-500/15 ring-1 ring-blue-300/30">
-              <ShieldCheck className="h-7 w-7 text-blue-300" />
-            </div>
-            <h1 className="text-2xl font-semibold text-white">AkadilEDU Admin</h1>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              Secure browser access approved from your Telegram account.
+      <div className="login-composition">
+        <section className="login-intro" aria-labelledby="login-title">
+          <div>
+            <p className="login-label">Browser sign in</p>
+            <h1 id="login-title">
+              {pending ? (
+                <>Match the code.<br />Approve access.</>
+              ) : (
+                <>Admin access,<br />approved by you.</>
+              )}
+            </h1>
+            <p className="login-intro-copy">
+              {pending
+                ? 'Your browser stays locked until you approve this exact request in Telegram.'
+                : 'Use your existing Telegram identity. No separate password, no credentials to remember.'}
             </p>
           </div>
+        </section>
 
-          <div className="p-8">
+        <section className="login-action" aria-labelledby="login-action-title">
+          <div className="login-action-content" key={pending ? 'pending' : 'ready'}>
+            {error && (
+              <div className="login-error" role="alert" aria-live="assertive">
+                <strong>Unable to sign in</strong>
+                <span>{error}</span>
+              </div>
+            )}
+
             {!pending ? (
               <>
-                <div className="mb-6 flex gap-3 rounded-2xl bg-slate-950/35 p-4">
-                  <KeyRound className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-300" />
-                  <p className="text-sm leading-6 text-slate-300">
-                    Request access here, compare the code, and approve the knock in the bot. No password is stored.
-                  </p>
-                </div>
+                <p className="login-step">Telegram verification</p>
+                <h2 id="login-action-title">Continue from your phone.</h2>
+                <p className="login-description">
+                  We will send a one-time approval request to the AkadilEDU bot. Only an authorized administrator can approve it.
+                </p>
                 <button
                   type="button"
                   disabled={creating}
+                  aria-busy={creating}
+                  data-loading={creating ? 'true' : 'false'}
                   onClick={onStartBrowserLogin}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-5 py-3.5 font-medium text-white transition hover:bg-blue-400 disabled:cursor-wait disabled:opacity-70"
+                  className="login-primary"
                 >
-                  {creating ? <LoaderCircle className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
-                  {creating ? 'Creating secure request…' : 'Knock through Telegram'}
+                  <span>{creating ? 'Preparing secure request…' : 'Continue with Telegram'}</span>
+                  <ArrowUpRight aria-hidden="true" />
                 </button>
+                <p className="login-assurance">The request expires automatically and can be used only once.</p>
               </>
             ) : (
-              <div className="text-center">
-                <p className="text-sm font-medium uppercase tracking-[0.18em] text-blue-300">Your matching code</p>
-                <div className="my-5 rounded-2xl border border-blue-300/20 bg-slate-950/45 px-6 py-5 font-mono text-4xl font-semibold tracking-[0.22em] text-white">
-                  {browserRequest.displayCode}
-                </div>
-                <p className="mb-5 text-sm leading-6 text-slate-300">
-                  Open the bot, make sure it shows the same code, then tap <span className="font-medium text-white">Approve sign-in</span>.
+              <>
+                <p className="login-step">Telegram verification</p>
+                <h2 id="login-action-title">Confirm this code.</h2>
+                <p className="login-description">
+                  Open the bot and approve the request only if the same code appears there.
                 </p>
+                <output className="login-code" aria-label={`Matching code ${browserRequest.displayCode}`} translate="no">
+                  {browserRequest.displayCode}
+                </output>
                 <a
                   href={browserRequest.botUrl}
                   target="_blank"
-                  rel="noreferrer"
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-500 px-5 py-3.5 font-medium text-white transition hover:bg-blue-400"
+                  rel="noopener noreferrer"
+                  className="login-primary"
                 >
-                  <Send className="h-5 w-5" />
-                  Open approval in Telegram
+                  <span>Open approval in Telegram</span>
+                  <ArrowUpRight aria-hidden="true" />
                 </a>
-                <div className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-400">
-                  <LoaderCircle className="h-4 w-4 animate-spin" />
-                  Waiting for your approval
+                <div className="login-status" role="status" aria-live="polite">
+                  <span>Status</span>
+                  <strong>Waiting for your approval</strong>
                 </div>
-                <button
-                  type="button"
-                  onClick={onCancelBrowserLogin}
-                  className="mx-auto mt-5 flex items-center gap-1.5 text-sm text-slate-400 transition hover:text-white"
-                >
-                  <X className="h-4 w-4" />
-                  Cancel request
+                <button type="button" onClick={onCancelBrowserLogin} className="login-cancel">
+                  <span>Cancel request</span>
+                  <X aria-hidden="true" />
                 </button>
-              </div>
+              </>
             )}
           </div>
-        </div>
-
-        <p className="mt-4 text-center text-xs text-slate-500">
-          Browser access lasts for this browser session only.
-        </p>
+        </section>
       </div>
-    </div>
+
+      <footer className="login-footer">
+        <span>Private by design. No password stored.</span>
+        <span>Browser access ends when this session closes.</span>
+      </footer>
+    </main>
   );
 }
