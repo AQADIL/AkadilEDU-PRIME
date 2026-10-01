@@ -7,6 +7,8 @@ const { z } = require('zod');
 
 const botToken = defineSecret('BOT_TOKEN');
 const webhookSecret = defineSecret('TELEGRAM_WEBHOOK_SECRET');
+const browserAuth = require('./browserAuth');
+const browserOtpPepper = browserAuth.browserOtpPepper;
 const schedule = process.env.SCHEDULER_CRON;
 
 if (!schedule || !schedule.trim()) {
@@ -59,8 +61,8 @@ function matchesSecret(headerValue, expectedValue) {
 }
 
 exports.adminAuth = require('./adminAuth').adminAuth;
-exports.beginBrowserAuth = require('./browserAuth').beginBrowserAuth;
-exports.completeBrowserAuth = require('./browserAuth').completeBrowserAuth;
+exports.beginBrowserAuth = browserAuth.beginBrowserAuth;
+exports.completeBrowserAuth = browserAuth.completeBrowserAuth;
 
 exports.verifyChannel = onCall({
   region: process.env.DEPLOY_REGION,
@@ -103,7 +105,7 @@ exports.verifyChannel = onCall({
 
 exports.telegramWebhook = onRequest({
   region: process.env.DEPLOY_REGION,
-  secrets: [botToken, webhookSecret],
+  secrets: [botToken, webhookSecret, browserOtpPepper],
   maxInstances: 10
 }, async (request, response) => {
   if (request.method !== 'POST') {

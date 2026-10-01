@@ -2,6 +2,7 @@ const { Bot, InlineKeyboard } = require('grammy');
 const { randomUUID } = require('node:crypto');
 const { db, transactionLoaded, transactionExisting } = require('./firebase');
 const { t, normalizeLanguage } = require('./i18n');
+const { generateBrowserOtp, digestBrowserOtp } = require('./browserAuthOtp');
 const { assertId, getQuestion, listQuestions, shuffle, topicOf, findSimilar, formatQuestion, splitMessage } = require('./quizData');
 
 function userId(ctx) {
@@ -35,42 +36,28 @@ async function saveUser(ctx) {
 async function showBrowserAuthRequest(ctx, requestId) {
   const id = userId(ctx);
   const language = await languageFor(ctx);
-  const [admin, request] = await Promise.all([
-    db.ref(`admins/${id}`).once('value'),
-    db.ref(`browserAuthRequests/${requestId}`).once('value'),
-  ]);
-  if (!admin.exists()) return ctx.reply(t(language, 'adminOnly'));
-  const value = request.val();
-  if (!value || value.status !== 'pending' || !Number.isSafeInteger(value.expiresAt)
-    || value.expiresAt <= Date.now() || !/^[A-Z2-9]{6}$/.test(value.displayCode || '')) {
-    return ctx.reply(t(language, 'browserLoginExpired'));
-  }
-  await ctx.reply(t(language, 'browserLoginRequest', value.displayCode), {
-    reply_markup: new InlineKeyboard().text(t(language, 'browserLoginApprove'), `ba:${requestId}`),
-  });
-}
-
-async function approveBrowserAuth(ctx, requestId) {
-  const id = userId(ctx);
-  const language = await languageFor(ctx);
   const admin = await db.ref(`admins/${id}`).once('value');
-  if (!admin.exists()) {
-    return ctx.answerCallbackQuery({ text: t(language, 'adminOnly'), show_alert: true });
-  }
-
+  if (!admin.exists()) return ctx.reply(t(language, 'adminOnly'));
   const now = Date.now();
+  const otp = generateBrowserOtp();
   const result = await transactionExisting(db.ref(`browserAuthRequests/${requestId}`), (current) => {
     if (!current || current.status !== 'pending' || !Number.isSafeInteger(current.expiresAt)
-      || current.expiresAt <= now) {
+      || current.expiresAt <= now || !/^[a-f0-9]{64}$/.test(current.challenge || '')) {
       return;
     }
-    return { ...current, status: 'approved', approvedBy: id, approvedAt: now };
+    return {
+      ...current,
+      status: 'otp_issued',
+      issuedTo: id,
+      issuedAt: now,
+      attempts: 0,
+      otpHash: digestBrowserOtp(requestId, current.challenge, otp),
+    };
   });
   if (!result.committed) {
-    return ctx.answerCallbackQuery({ text: t(language, 'browserLoginExpired'), show_alert: true });
+    return ctx.reply(t(language, 'browserLoginExpired'));
   }
-  await ctx.answerCallbackQuery({ text: t(language, 'browserLoginApprovedAlert') });
-  await ctx.editMessageText(t(language, 'browserLoginApproved', result.snapshot.val().displayCode));
+  await ctx.reply(t(language, 'browserLoginCode', otp));
 }
 
 function menu(language) {
@@ -400,9 +387,6 @@ function createBot() {
   });
   bot.callbackQuery(/^c:([a-f0-9]{24}):(\d{1,4}):([0-7])$/, async (ctx) => {
     await answerChannel(ctx, ctx.match[1], Number(ctx.match[2]), Number(ctx.match[3]));
-  });
-  bot.callbackQuery(/^ba:([a-f0-9]{48})$/, async (ctx) => {
-    await approveBrowserAuth(ctx, ctx.match[1]);
   });
   bot.callbackQuery('menu:random', async (ctx) => { await ctx.answerCallbackQuery(); await startPractice(ctx, 'random'); });
   bot.callbackQuery('menu:topics', async (ctx) => { await ctx.answerCallbackQuery(); await showTopics(ctx); });

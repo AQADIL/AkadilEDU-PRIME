@@ -1,20 +1,23 @@
-const { createHash, randomBytes, randomInt, timingSafeEqual } = require('node:crypto');
+const { createHash, randomBytes, timingSafeEqual } = require('node:crypto');
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
+const { defineSecret } = require('firebase-functions/params');
 const { getApps, initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getDatabase } = require('firebase-admin/database');
 const logger = require('firebase-functions/logger');
 const { z } = require('zod');
+const { matchesBrowserOtp } = require('./bot/browserAuthOtp');
 
 const challengeSchema = z.string().regex(/^[a-f0-9]{64}$/);
 const requestIdSchema = z.string().regex(/^[a-f0-9]{48}$/);
 const verifierSchema = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
-const displayCodeAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const otpSchema = z.string().regex(/^\d{4}$/);
+const browserOtpPepper = defineSecret('BROWSER_AUTH_OTP_PEPPER');
 
-function positiveInteger(name) {
+function positiveInteger(name, maximum = Number.MAX_SAFE_INTEGER) {
   const value = Number(process.env[name]);
-  if (!Number.isSafeInteger(value) || value <= 0) {
-    throw new Error(`${name} must be a positive integer.`);
+  if (!Number.isSafeInteger(value) || value <= 0 || value > maximum) {
+    throw new Error(`${name} must be an integer between 1 and ${maximum}.`);
   }
   return value;
 }
@@ -44,7 +47,7 @@ function configuration() {
     ttlMs: positiveInteger('BROWSER_AUTH_TTL_SECONDS') * 1000,
     rateWindowMs: positiveInteger('BROWSER_AUTH_RATE_WINDOW_SECONDS') * 1000,
     rateMax: positiveInteger('BROWSER_AUTH_RATE_MAX'),
-    pollAfterMs: positiveInteger('BROWSER_AUTH_POLL_INTERVAL_MS'),
+    otpMaxAttempts: positiveInteger('BROWSER_AUTH_OTP_MAX_ATTEMPTS', 5),
   };
 }
 
@@ -55,10 +58,6 @@ function database() {
   return getDatabase(app);
 }
 
-function displayCode() {
-  return Array.from({ length: 6 }, () => displayCodeAlphabet[randomInt(displayCodeAlphabet.length)]).join('');
-}
-
 function hash(value) {
   return createHash('sha256').update(value).digest('hex');
 }
@@ -66,6 +65,15 @@ function hash(value) {
 function equalHex(left, right) {
   if (!/^[a-f0-9]{64}$/.test(left) || !/^[a-f0-9]{64}$/.test(right)) return false;
   return timingSafeEqual(Buffer.from(left, 'hex'), Buffer.from(right, 'hex'));
+}
+
+function telegramId(value) {
+  const normalized = String(value || '');
+  return /^\d{1,16}$/.test(normalized) ? normalized : null;
+}
+
+function authError(code, message, reason) {
+  return new HttpsError(code, message, { reason });
 }
 
 async function transactionLoaded(reference, updateValue) {
@@ -108,27 +116,31 @@ exports.beginBrowserAuth = onCall({ region: config.region }, async (request) => 
   const now = Date.now();
   await enforceRequestRateLimit(request, now);
   const requestId = randomBytes(24).toString('hex');
-  const code = displayCode();
   const expiresAt = now + config.ttlMs;
   await database().ref(`browserAuthRequests/${requestId}`).set({
     challenge: parsed.data.challenge,
-    displayCode: code,
     status: 'pending',
+    attempts: 0,
     createdAt: now,
     expiresAt,
   });
 
   return {
     requestId,
-    displayCode: code,
     expiresAt,
-    pollAfterMs: config.pollAfterMs,
     botUrl: `${config.deepLinkBaseUrl}?start=admin_${requestId}`,
   };
 });
 
-exports.completeBrowserAuth = onCall({ region: config.region }, async (request) => {
-  const parsed = z.object({ requestId: requestIdSchema, verifier: verifierSchema }).strict().safeParse(request.data);
+exports.completeBrowserAuth = onCall({
+  region: config.region,
+  secrets: [browserOtpPepper],
+}, async (request) => {
+  const parsed = z.object({
+    requestId: requestIdSchema,
+    verifier: verifierSchema,
+    otp: otpSchema,
+  }).strict().safeParse(request.data);
   if (!parsed.success) {
     throw new HttpsError('invalid-argument', 'A valid browser sign-in request is required.');
   }
@@ -136,48 +148,92 @@ exports.completeBrowserAuth = onCall({ region: config.region }, async (request) 
   const reference = database().ref(`browserAuthRequests/${parsed.data.requestId}`);
   const snapshot = await reference.get();
   const current = snapshot.val();
-  if (!current || !equalHex(current.challenge, hash(parsed.data.verifier))) {
-    throw new HttpsError('permission-denied', 'Browser sign-in request is invalid.');
+  const challenge = hash(parsed.data.verifier);
+  if (!current || !equalHex(current.challenge, challenge)) {
+    throw authError('permission-denied', 'Browser sign-in request is invalid.', 'invalid-request');
   }
   if (!Number.isSafeInteger(current.expiresAt) || current.expiresAt <= Date.now()) {
-    throw new HttpsError('deadline-exceeded', 'Browser sign-in request has expired.');
+    throw authError('deadline-exceeded', 'Browser sign-in request has expired.', 'expired');
   }
   if (current.status === 'pending') {
-    return { status: 'pending', pollAfterMs: config.pollAfterMs };
+    throw authError('failed-precondition', 'Open the Telegram bot to receive the code.', 'code-not-sent');
   }
-  if (current.status !== 'approved' || !/^\d{1,16}$/.test(String(current.approvedBy || ''))) {
-    throw new HttpsError('failed-precondition', 'Browser sign-in request is no longer available.');
+  if (current.status === 'locked') {
+    throw authError('resource-exhausted', 'Too many incorrect code attempts.', 'attempts-exhausted');
   }
-
-  const telegramId = String(current.approvedBy);
-  const [adminSnapshot, userSnapshot] = await Promise.all([
-    database().ref(`admins/${telegramId}`).get(),
-    database().ref(`users/${telegramId}`).get(),
-  ]);
-  if (!adminSnapshot.exists()) {
-    throw new HttpsError('permission-denied', 'Administrator access has been revoked.');
+  if (current.status !== 'otp_issued' || !telegramId(current.issuedTo)) {
+    throw authError('failed-precondition', 'Browser sign-in request is no longer available.', 'unavailable');
   }
 
-  const consumedAt = Date.now();
-  const consumed = await transactionLoaded(reference, (value) => {
-    if (!value || value.status !== 'approved' || String(value.approvedBy) !== telegramId
-      || value.expiresAt <= consumedAt || !equalHex(value.challenge, current.challenge)) {
+  const attemptedAt = Date.now();
+  const attemptId = randomBytes(16).toString('hex');
+  const result = await transactionLoaded(reference, (value) => {
+    if (!value || value.status !== 'otp_issued' || value.expiresAt <= attemptedAt
+      || !equalHex(value.challenge, challenge) || !telegramId(value.issuedTo)) {
       return;
     }
-    return { ...value, status: 'consumed', consumedAt };
+    const attempts = Number.isSafeInteger(value.attempts) ? value.attempts : 0;
+    if (attempts >= config.otpMaxAttempts) return;
+    if (!matchesBrowserOtp(value.otpHash, parsed.data.requestId, value.challenge, parsed.data.otp)) {
+      const nextAttempts = attempts + 1;
+      return {
+        ...value,
+        attempts: nextAttempts,
+        lastAttemptAt: attemptedAt,
+        lastAttemptId: attemptId,
+        status: nextAttempts >= config.otpMaxAttempts ? 'locked' : 'otp_issued',
+        otpHash: nextAttempts >= config.otpMaxAttempts ? null : value.otpHash,
+      };
+    }
+    return {
+      ...value,
+      status: 'consumed',
+      consumedAt: attemptedAt,
+      consumedAttemptId: attemptId,
+      otpHash: null,
+      lastAttemptId: null,
+    };
   });
-  if (!consumed.committed) {
-    throw new HttpsError('failed-precondition', 'Browser sign-in request has already been used.');
+
+  const verified = result.snapshot.val();
+  if (!result.committed) {
+    if (verified?.status === 'locked') {
+      throw authError('resource-exhausted', 'Too many incorrect code attempts.', 'attempts-exhausted');
+    }
+    if (Number.isSafeInteger(verified?.expiresAt) && verified.expiresAt <= Date.now()) {
+      throw authError('deadline-exceeded', 'Browser sign-in request has expired.', 'expired');
+    }
+    throw authError('failed-precondition', 'Browser sign-in request is no longer available.', 'unavailable');
+  }
+  if (verified?.lastAttemptId === attemptId) {
+    const exhausted = verified.status === 'locked';
+    throw authError(
+      exhausted ? 'resource-exhausted' : 'permission-denied',
+      exhausted ? 'Too many incorrect code attempts.' : 'The code is incorrect.',
+      exhausted ? 'attempts-exhausted' : 'invalid-code',
+    );
+  }
+  if (verified?.status !== 'consumed' || verified.consumedAttemptId !== attemptId) {
+    throw authError('failed-precondition', 'Browser sign-in request is no longer available.', 'unavailable');
+  }
+
+  const issuedTo = telegramId(verified.issuedTo);
+  const [adminSnapshot, userSnapshot] = await Promise.all([
+    database().ref(`admins/${issuedTo}`).get(),
+    database().ref(`users/${issuedTo}`).get(),
+  ]);
+  if (!adminSnapshot.exists()) {
+    throw authError('permission-denied', 'Administrator access has been revoked.', 'admin-revoked');
   }
 
   try {
-    const token = await getAuth().createCustomToken(telegramId, { admin: true });
+    const token = await getAuth().createCustomToken(issuedTo, { admin: true });
     const profile = userSnapshot.val() || {};
     return {
       status: 'approved',
       token,
       user: {
-        id: Number(telegramId),
+        id: Number(issuedTo),
         firstName: typeof profile.firstName === 'string' ? profile.firstName : '',
         lastName: typeof profile.lastName === 'string' ? profile.lastName : '',
         username: typeof profile.username === 'string' ? profile.username : '',
@@ -204,4 +260,5 @@ async function cleanupBrowserAuth(now) {
   if (Object.keys(updates).length > 0) await root.ref().update(updates);
 }
 
+exports.browserOtpPepper = browserOtpPepper;
 exports.cleanupBrowserAuth = cleanupBrowserAuth;

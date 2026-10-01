@@ -10,7 +10,7 @@ Telegram бот для практики по математике ҰБТ и еж
 
 Админ панель использует проверку подлинного `Telegram.WebApp.initData` на сервере. Только пользователь из `/admins` получает Firebase custom token с ролью администратора. Realtime Database и Storage закрыты для неподтверждённых клиентов; бот и Cloud Functions работают через Firebase Admin SDK.
 
-Из обычного браузера администратор нажимает `Knock through Telegram`. Панель создаёт короткоживущий одноразовый запрос с криптографическим challenge и показывает шестисимвольный код. Бот показывает тот же код и отдельную кнопку подтверждения. После подтверждения браузер получает Firebase custom token; сессия хранится только до закрытия браузерной сессии. Пароли, постоянные коды и публичный доступ к базе для этого не используются.
+Из обычного браузера администратор запрашивает одноразовый четырёхзначный код и открывает персональную deep link бота. Бот проверяет Telegram ID по `/admins` и отправляет код в личный чат. В базе хранится только HMAC кода; число попыток ограничено, а правильная проверка атомарно сжигает запрос. Браузер остаётся привязан к запросу криптографическим challenge и после проверки получает Firebase custom token.
 
 ## Структура
 
@@ -26,9 +26,9 @@ Telegram бот для практики по математике ҰБТ и еж
 Все значения задаются через окружение. Не добавляйте токены или ключ сервисного аккаунта в исходники.
 
 1. Для локального бота заполните корневой `.env` по `.env.example`. `GOOGLE_APPLICATION_CREDENTIALS` указывает на локальный ключ сервисного аккаунта; в Cloud Functions используется Application Default Credentials.
-2. Для функций заполните `functions/.env` по `functions/.env.example`. `RTDB_URL` и `DEPLOY_REGION` задают базу и регион; префикс `FIREBASE_` и имя `FUNCTION_REGION` зарезервированы Firebase. `SCHEDULER_CRON` должен запускать проверку раз в минуту. Ежедневное время конкретной кампании задаётся в Mini App. `ADMIN_INIT_DATA_MAX_AGE_SECONDS` задаёт допустимый срок подписанных Telegram данных. Параметры `BROWSER_AUTH_TTL_SECONDS`, `BROWSER_AUTH_RATE_WINDOW_SECONDS`, `BROWSER_AUTH_RATE_MAX` и `BROWSER_AUTH_POLL_INTERVAL_MS` управляют сроком, защитой от частых запросов и интервалом проверки браузерного входа.
+2. Для функций заполните `functions/.env` по `functions/.env.example`. `RTDB_URL` и `DEPLOY_REGION` задают базу и регион; префикс `FIREBASE_` и имя `FUNCTION_REGION` зарезервированы Firebase. `SCHEDULER_CRON` должен запускать проверку раз в минуту. Ежедневное время конкретной кампании задаётся в Mini App. `ADMIN_INIT_DATA_MAX_AGE_SECONDS` задаёт допустимый срок подписанных Telegram данных. Параметры `BROWSER_AUTH_TTL_SECONDS`, `BROWSER_AUTH_RATE_WINDOW_SECONDS`, `BROWSER_AUTH_RATE_MAX` и `BROWSER_AUTH_OTP_MAX_ATTEMPTS` управляют сроком и защитой браузерного входа от перебора.
 3. Для Mini App заполните `admin-mini-app/.env` по её `.env.example`. `VITE_FIREBASE_FUNCTIONS_REGION` должен совпадать с `DEPLOY_REGION`; `VITE_TELEGRAM_WEB_APP_SCRIPT_URL` указывает на официальный скрипт Telegram Mini Apps.
-4. Секреты `BOT_TOKEN` и `TELEGRAM_WEBHOOK_SECRET` для Cloud Functions задайте в Firebase Secret Manager через `firebase functions:secrets:set`. Не помещайте их в `functions/.env`.
+4. Секреты `BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET` и `BROWSER_AUTH_OTP_PEPPER` для Cloud Functions задайте в Firebase Secret Manager через `firebase functions:secrets:set`. OTP pepper должен содержать не менее 32 случайных байт. Не помещайте эти значения в `functions/.env`.
 5. `BOT_DEEP_LINK_BASE_URL` — HTTPS ссылка на бота в Telegram, соответствующая `BOT_USERNAME`. `MINI_APP_URL` — HTTPS адрес панели. `TELEGRAM_WEBHOOK_URL` — опубликованный адрес функции `telegramWebhook`, используется только локальной командой регистрации webhook.
 6. В Firebase проекте инициализируйте Authentication для обмена custom token на пользовательскую сессию. Для Cloud Functions 2nd Gen дайте её сервисному аккаунту роль `roles/iam.serviceAccountTokenCreator` на собственном сервисном аккаунте: Firebase Admin SDK использует `iam.serviceAccounts.signBlob`. Обычные способы входа (анонимный, email, телефон) для панели не нужны.
 
@@ -58,7 +58,7 @@ firebase deploy --only database,storage,functions,hosting --project $env:FIREBAS
 npm --prefix bot run webhook:register
 ```
 
-Перед регистрацией webhook задайте `TELEGRAM_WEBHOOK_URL` и `TELEGRAM_WEBHOOK_SECRET` в корневом `.env`. Секрет webhook должен совпадать с Secret Manager. Добавьте бота администратором нужного канала с правом публикации. Включайте кампанию после этого. Локальный режим `npm --prefix bot start` использует polling и предназначен для разработки без активного webhook.
+Перед регистрацией webhook задайте `TELEGRAM_WEBHOOK_URL`, `TELEGRAM_WEBHOOK_SECRET` и `BROWSER_AUTH_OTP_PEPPER` в корневом `.env`. Значения webhook secret и OTP pepper должны совпадать с Secret Manager. Добавьте бота администратором нужного канала с правом публикации. Включайте кампанию после этого. Локальный режим `npm --prefix bot start` использует polling и предназначен для разработки без активного webhook.
 
 ## Данные вопросов
 
