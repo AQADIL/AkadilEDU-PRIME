@@ -71,6 +71,11 @@ export async function getTopics() {
   return Object.entries(snapshot.val()).map(([id, topic]) => ({ id, ...topic }));
 }
 
+export function countQuestionTopics(topics) {
+  if (!Array.isArray(topics)) return 0;
+  return topics.reduce((count, topic) => count + (topic?.isLast === true ? 1 : 0), 0);
+}
+
 async function runTopicsTransaction(updateTopics) {
   const topicsRef = ref(db, 'topics');
   let unsubscribe;

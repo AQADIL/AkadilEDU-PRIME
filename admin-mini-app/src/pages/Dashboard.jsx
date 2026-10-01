@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { BarChart3, Users, BrainCircuit, BookOpen, Calendar } from 'lucide-react';
 import { useTheme } from '../contexts/theme';
 import { db, ref, get } from '../lib/firebase';
+import { countQuestionTopics } from '../services/topics';
 
 function Dashboard() {
   const { currentTheme } = useTheme();
@@ -17,9 +18,13 @@ function Dashboard() {
         const snapshots = await Promise.all(
           ['questions', 'topics', 'users', 'campaigns'].map(path => get(ref(db, path)))
         );
-        const [totalQuestions, totalTopics, totalUsers, totalCampaigns] = snapshots.map(
-          snapshot => snapshot.exists() ? snapshot.size : 0
+        const [questionsSnapshot, topicsSnapshot, usersSnapshot, campaignsSnapshot] = snapshots;
+        const totalQuestions = questionsSnapshot.exists() ? questionsSnapshot.size : 0;
+        const totalTopics = countQuestionTopics(
+          topicsSnapshot.exists() ? Object.values(topicsSnapshot.val()) : []
         );
+        const totalUsers = usersSnapshot.exists() ? usersSnapshot.size : 0;
+        const totalCampaigns = campaignsSnapshot.exists() ? campaignsSnapshot.size : 0;
         setStats({ totalQuestions, totalTopics, totalUsers, totalCampaigns });
         setError('');
       } catch (loadError) {
@@ -34,7 +39,7 @@ function Dashboard() {
 
   const statsData = [
     { label: 'Questions', value: stats.totalQuestions, icon: BrainCircuit, color: 'bg-blue-500/20' },
-    { label: 'Topics', value: stats.totalTopics, icon: BookOpen, color: 'bg-emerald-500/20' },
+    { label: 'Question Topics', value: stats.totalTopics, icon: BookOpen, color: 'bg-emerald-500/20' },
     { label: 'Users', value: stats.totalUsers, icon: Users, color: 'bg-purple-500/20' },
     { label: 'Campaigns', value: stats.totalCampaigns, icon: Calendar, color: 'bg-orange-500/20' },
   ];

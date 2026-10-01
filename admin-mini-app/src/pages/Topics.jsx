@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Save, X, Folder, FolderOpen, FileText, Edit, Trash2, ArrowLeft } from 'lucide-react';
 import { useTheme } from '../contexts/theme';
-import { getTopics, createTopic, updateTopic, deleteTopic } from '../services/topics';
+import { getTopics, countQuestionTopics, createTopic, updateTopic, deleteTopic } from '../services/topics';
 
 export default function Topics() {
   const { currentTheme } = useTheme();
@@ -64,6 +64,7 @@ export default function Topics() {
   };
 
   const topicTree = buildTopicTree('');
+  const questionTopicCount = countQuestionTopics(topics);
 
   const handleCreate = async () => {
     try {
@@ -241,9 +242,14 @@ export default function Topics() {
               <ArrowLeft className="w-5 h-5" />
               <span className="font-medium">Back</span>
             </Link>
-            <h1 className={`text-xl font-bold ${currentTheme.text}`}>
-              Topics
-            </h1>
+            <div className="text-center">
+              <h1 className={`text-xl font-bold ${currentTheme.text}`}>
+                Topics
+              </h1>
+              <p className={`mt-0.5 text-xs ${currentTheme.textSecondary}`}>
+                {loading ? 'Loading…' : `${questionTopicCount} question topics`}
+              </p>
+            </div>
             <button
               onClick={() => {
                 setParentTopicId('');
