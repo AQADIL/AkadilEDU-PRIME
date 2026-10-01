@@ -177,6 +177,7 @@
 .otp-field {
   position: relative;
   display: block;
+  width: min(100%, 19rem);
 }
 
 .otp-native-input {
@@ -205,12 +206,14 @@
 }
 
 .otp-slots {
+  min-height: 4.35rem;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: clamp(0.6rem, 1.5vw, 1rem);
+  align-content: center;
+  gap: 0.55rem;
   outline: 2px solid transparent;
   outline-offset: 4px;
-  transition: outline-color 160ms ease;
+  transition: outline-color 160ms ease, gap 440ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .otp-field:focus-within .otp-slots {
@@ -220,7 +223,7 @@
 .otp-slot {
   position: relative;
   min-width: 0;
-  height: clamp(6rem, 9.5vw, 8.25rem);
+  aspect-ratio: 1;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -228,7 +231,7 @@
   border-radius: 0.5rem;
   background: #101217;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: clamp(2.5rem, 4.4vw, 4rem);
+  font-size: clamp(1.9rem, 3vw, 2.4rem);
   font-weight: 500;
   line-height: 1;
   font-variant-numeric: tabular-nums;
@@ -279,7 +282,6 @@
 
 .otp-field.is-verifying .otp-slot {
   border-color: var(--login-line);
-  opacity: 0.55;
 }
 
 .otp-field.is-invalid .otp-slots {
@@ -291,7 +293,19 @@
 }
 
 .otp-field.is-success .otp-slots {
-  opacity: 0.18;
+  grid-template-columns: repeat(4, 1.25rem);
+  justify-content: center;
+  gap: 0;
+}
+
+.otp-field.is-success .otp-slot {
+  border-color: var(--login-accent);
+  border-radius: 0.25rem;
+  background: var(--login-accent);
+}
+
+.otp-field.is-success .otp-digit {
+  opacity: 0;
 }
 
 .otp-success-mark {
@@ -304,13 +318,12 @@
 }
 
 .otp-success-mark svg {
-  width: 3rem;
-  height: 3rem;
-  padding: 0.65rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0.6rem;
   border: 1px solid var(--login-accent);
   border-radius: 50%;
   color: var(--login-accent);
-  animation: otp-success 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .otp-feedback {
@@ -404,17 +417,6 @@
   65% { transform: translateX(0.35rem); }
 }
 
-@keyframes otp-success {
-  from {
-    opacity: 0;
-    transform: scale(0.78) rotate(-8deg);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) rotate(0);
-  }
-}
-
 @media (max-width: 56rem) {
   .login-shell {
     display: block;
@@ -449,9 +451,6 @@
     width: 100%;
   }
 
-  .otp-slot {
-    height: clamp(5rem, 21vw, 7rem);
-  }
 }
 
 @media (max-width: 30rem) {
@@ -480,13 +479,8 @@
     font-size: 0.95rem;
   }
 
-  .otp-slots {
-    gap: 0.5rem;
-  }
-
   .otp-slot {
-    height: 5rem;
-    font-size: 2.4rem;
+    font-size: clamp(1.75rem, 8vw, 2.15rem);
   }
 
   .login-links {
@@ -500,8 +494,7 @@
   .login-action-content,
   .otp-slot.has-value .otp-digit,
   .otp-field.is-verifying::after,
-  .otp-field.is-invalid .otp-slots,
-  .otp-success-mark svg {
+  .otp-field.is-invalid .otp-slots {
     animation: none;
   }
 

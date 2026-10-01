@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { AnimatePresence, motion, useReducedMotion } from 'framer-motion';
 import { ArrowRight, Check } from 'lucide-react';
 import './Login.css';
 
@@ -14,6 +15,7 @@ export default function Login({
   const [otp, setOtp] = useState('');
   const inputRef = useRef(null);
   const submittedOtp = useRef('');
+  const reduceMotion = useReducedMotion();
   const creating = browserRequest?.status === 'creating';
   const pending = browserRequest && !creating;
   const verifying = browserRequest?.status === 'verifying';
@@ -128,26 +130,46 @@ export default function Login({
                       aria-describedby={verificationError ? 'otp-error' : 'otp-status'}
                       onChange={handleOtpChange}
                     />
-                    <span className="otp-slots" aria-hidden="true">
+                    <motion.span className="otp-slots" aria-hidden="true" layout>
                       {Array.from({ length: otpLength }, (_, index) => {
                         const digit = otp[index] || '';
                         const active = !verifying && !success && Math.min(otp.length, otpLength - 1) === index;
                         return (
-                          <span
+                          <motion.span
                             className={`otp-slot${digit ? ' has-value' : ''}${active ? ' is-active' : ''}`}
-                            style={{ '--otp-index': index }}
                             key={index}
+                            layout
+                            animate={{ opacity: success ? 0 : verifying ? 0.55 : 1 }}
+                            transition={reduceMotion ? { duration: 0 } : {
+                              layout: { duration: 0.44, ease: [0.22, 1, 0.36, 1] },
+                              opacity: success
+                                ? { duration: 0.14, delay: 0.34 }
+                                : { duration: 0.16 },
+                            }}
                           >
                             <span className="otp-digit">{digit}</span>
-                          </span>
+                          </motion.span>
                         );
                       })}
-                    </span>
-                    {success && (
-                      <span className="otp-success-mark" aria-hidden="true">
-                        <Check />
-                      </span>
-                    )}
+                    </motion.span>
+                    <AnimatePresence>
+                      {success && (
+                        <motion.span
+                          className="otp-success-mark"
+                          aria-hidden="true"
+                          initial={reduceMotion ? false : { opacity: 0, scale: 0.72, rotate: -10 }}
+                          animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                          exit={{ opacity: 0, scale: 0.88 }}
+                          transition={reduceMotion ? { duration: 0 } : {
+                            delay: 0.42,
+                            duration: 0.26,
+                            ease: [0.22, 1, 0.36, 1],
+                          }}
+                        >
+                          <Check />
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
                   </label>
 
                   <div className="otp-feedback" aria-live="polite">

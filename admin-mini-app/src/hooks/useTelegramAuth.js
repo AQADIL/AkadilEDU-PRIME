@@ -97,7 +97,7 @@ function recoverableOtpError(error) {
 }
 
 function motionDelay() {
-  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 520;
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 180 : 1050;
 }
 
 function wait(milliseconds) {
