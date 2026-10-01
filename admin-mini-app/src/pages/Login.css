@@ -177,7 +177,7 @@
 .otp-field {
   position: relative;
   display: block;
-  width: min(100%, 19rem);
+  width: min(100%, 21.5rem);
 }
 
 .otp-native-input {
@@ -206,18 +206,11 @@
 }
 
 .otp-slots {
-  min-height: 4.35rem;
+  min-height: 4.9rem;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-content: center;
-  gap: 0.55rem;
-  outline: 2px solid transparent;
-  outline-offset: 4px;
-  transition: outline-color 160ms ease, gap 440ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.otp-field:focus-within .otp-slots {
-  outline-color: rgba(100, 117, 255, 0.55);
+  gap: 0.65rem;
 }
 
 .otp-slot {
@@ -228,7 +221,7 @@
   place-items: center;
   overflow: hidden;
   border: 1px solid var(--login-line-strong);
-  border-radius: 0.5rem;
+  border-radius: 0.9rem;
   background: #101217;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: clamp(1.9rem, 3vw, 2.4rem);
@@ -268,16 +261,15 @@
   animation: otp-digit-in 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.otp-field.is-verifying::after {
+.otp-verification-sweep {
   position: absolute;
   z-index: 3;
-  right: 75%;
-  bottom: -0.8rem;
-  width: 25%;
+  left: 0;
+  bottom: -0.65rem;
+  width: 20%;
   height: 2px;
+  border-radius: 999px;
   background: var(--login-accent);
-  content: "";
-  animation: otp-scan 900ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
 
 .otp-field.is-verifying .otp-slot {
@@ -290,22 +282,6 @@
 
 .otp-field.is-invalid .otp-slot {
   border-color: var(--login-danger);
-}
-
-.otp-field.is-success .otp-slots {
-  grid-template-columns: repeat(4, 1.25rem);
-  justify-content: center;
-  gap: 0;
-}
-
-.otp-field.is-success .otp-slot {
-  border-color: var(--login-accent);
-  border-radius: 0.25rem;
-  background: var(--login-accent);
-}
-
-.otp-field.is-success .otp-digit {
-  opacity: 0;
 }
 
 .otp-success-mark {
@@ -323,7 +299,9 @@
   padding: 0.6rem;
   border: 1px solid var(--login-accent);
   border-radius: 50%;
-  color: var(--login-accent);
+  background: var(--login-accent);
+  box-shadow: 0 0 0 0.45rem rgba(100, 117, 255, 0.1);
+  color: var(--login-canvas);
 }
 
 .otp-feedback {
@@ -404,11 +382,6 @@
     opacity: 1;
     transform: translateY(0) scale(1);
   }
-}
-
-@keyframes otp-scan {
-  from { transform: translateX(0); }
-  to { transform: translateX(300%); }
 }
 
 @keyframes otp-shake {
@@ -493,7 +466,6 @@
 @media (prefers-reduced-motion: reduce) {
   .login-action-content,
   .otp-slot.has-value .otp-digit,
-  .otp-field.is-verifying::after,
   .otp-field.is-invalid .otp-slots {
     animation: none;
   }
@@ -504,7 +476,6 @@
   .login-links button,
   .login-links svg,
   .otp-slot,
-  .otp-slots,
   .otp-slot::after {
     transition: none;
   }
