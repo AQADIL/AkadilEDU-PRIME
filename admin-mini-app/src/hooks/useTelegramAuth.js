@@ -79,8 +79,8 @@ async function createBrowserChallenge() {
 }
 
 function browserErrorMessage(error) {
-  if (error?.code === 'functions/resource-exhausted') return 'Too many sign-in requests. Try again in a minute.';
-  if (error?.code === 'functions/deadline-exceeded') return 'The sign-in request expired. Start a new one.';
+  if (error?.code === 'functions/resource-exhausted') return 'Too many attempts. Request a new code.';
+  if (error?.code === 'functions/deadline-exceeded') return 'Code expired. Request a new one.';
   if (error?.code === 'functions/permission-denied') return 'The sign-in request could not be verified.';
   if (error?.code === 'functions/failed-precondition') return 'The sign-in request is no longer available.';
   if (import.meta.env.DEV && typeof error?.message === 'string') {
@@ -89,21 +89,32 @@ function browserErrorMessage(error) {
   return 'Browser sign-in failed. Please try again.';
 }
 
+function recoverableOtpError(error) {
+  const reason = error?.details?.reason;
+  if (reason === 'invalid-code') return 'Incorrect code. Try again.';
+  if (reason === 'code-not-sent') return 'Open Telegram to receive your code.';
+  return null;
+}
+
+function motionDelay() {
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 0 : 520;
+}
+
+function wait(milliseconds) {
+  return new Promise(resolve => window.setTimeout(resolve, milliseconds));
+}
+
 export function useTelegramAuth() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [verificationError, setVerificationError] = useState(null);
   const [browserRequest, setBrowserRequest] = useState(null);
   const telegramAuthentication = useRef(null);
-  const pollTimer = useRef(null);
+  const browserCredentials = useRef(null);
+  const verificationInFlight = useRef(false);
+  const browserAuthenticationInProgress = useRef(false);
   const active = useRef(true);
-
-  const stopPolling = useCallback(() => {
-    if (pollTimer.current) {
-      clearTimeout(pollTimer.current);
-      pollTimer.current = null;
-    }
-  }, []);
 
   useEffect(() => {
     active.current = true;
@@ -136,7 +147,7 @@ export function useTelegramAuth() {
       setPersistence(auth, browserSessionPersistence).then(() => {
         if (disposed) return;
         unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-          if (disposed) return;
+          if (disposed || browserAuthenticationInProgress.current) return;
           if (!firebaseUser) {
             setUser(null);
             setLoading(false);
@@ -169,15 +180,17 @@ export function useTelegramAuth() {
     return () => {
       disposed = true;
       active.current = false;
-      stopPolling();
+      browserCredentials.current = null;
       if (unsubscribe) unsubscribe();
     };
-  }, [stopPolling]);
+  }, []);
 
   const startBrowserLogin = useCallback(async () => {
-    stopPolling();
+    if (verificationInFlight.current) return;
     setError(null);
+    setVerificationError(null);
     setBrowserRequest({ status: 'creating' });
+    browserCredentials.current = null;
     try {
       await signOut(auth);
       await setPersistence(auth, browserSessionPersistence);
@@ -186,8 +199,7 @@ export function useTelegramAuth() {
       const response = await begin({ challenge });
       const request = response.data;
       if (!request || !/^[a-f0-9]{48}$/.test(request.requestId)
-        || !/^[A-Z2-9]{6}$/.test(request.displayCode)
-        || !Number.isSafeInteger(request.expiresAt) || !Number.isSafeInteger(request.pollAfterMs)) {
+        || !Number.isSafeInteger(request.expiresAt)) {
         throw new Error('Invalid browser authentication response.');
       }
       const botUrl = new URL(request.botUrl);
@@ -196,64 +208,103 @@ export function useTelegramAuth() {
       }
 
       if (!active.current) return;
+      browserCredentials.current = {
+        requestId: request.requestId,
+        verifier,
+        expiresAt: request.expiresAt,
+      };
       setBrowserRequest({
         status: 'pending',
-        displayCode: request.displayCode,
         botUrl: botUrl.toString(),
         expiresAt: request.expiresAt,
       });
-      const complete = httpsCallable(functions, 'completeBrowserAuth');
-
-      const poll = async () => {
-        try {
-          if (Date.now() >= request.expiresAt) {
-            const expired = new Error('Expired');
-            expired.code = 'functions/deadline-exceeded';
-            throw expired;
-          }
-          const completion = await complete({ requestId: request.requestId, verifier });
-          if (completion.data?.status === 'pending') {
-            const delay = Number.isSafeInteger(completion.data.pollAfterMs)
-              ? completion.data.pollAfterMs
-              : request.pollAfterMs;
-            pollTimer.current = setTimeout(poll, delay);
-            return;
-          }
-          if (completion.data?.status !== 'approved') {
-            throw new Error('Invalid browser authentication completion.');
-          }
-          const profile = await authenticateWithToken(
-            completion.data.token,
-            completion.data.user,
-            browserSessionPersistence,
-          );
-          if (active.current) {
-            setUser(profile);
-            setBrowserRequest(null);
-            setError(null);
-          }
-        } catch (pollError) {
-          if (active.current) {
-            setBrowserRequest(null);
-            setError(browserErrorMessage(pollError));
-          }
-        }
-      };
-
-      pollTimer.current = setTimeout(poll, request.pollAfterMs);
     } catch (startError) {
       if (active.current) {
+        browserCredentials.current = null;
         setBrowserRequest(null);
         setError(browserErrorMessage(startError));
       }
     }
-  }, [stopPolling]);
+  }, []);
+
+  const verifyBrowserOtp = useCallback(async (otp) => {
+    if (!/^\d{4}$/.test(otp) || verificationInFlight.current) return;
+    const credentials = browserCredentials.current;
+    if (!credentials) {
+      setBrowserRequest(null);
+      setError('Request a new code.');
+      return;
+    }
+    if (Date.now() >= credentials.expiresAt) {
+      browserCredentials.current = null;
+      setBrowserRequest(null);
+      setError('Code expired. Request a new one.');
+      return;
+    }
+
+    verificationInFlight.current = true;
+    setVerificationError(null);
+    setBrowserRequest(current => current ? { ...current, status: 'verifying' } : current);
+    try {
+      const complete = httpsCallable(functions, 'completeBrowserAuth');
+      const response = await complete({
+        requestId: credentials.requestId,
+        verifier: credentials.verifier,
+        otp,
+      });
+      if (response.data?.status !== 'approved') {
+        throw new Error('Invalid browser authentication completion.');
+      }
+      browserAuthenticationInProgress.current = true;
+      const profile = await authenticateWithToken(
+        response.data.token,
+        response.data.user,
+        browserSessionPersistence,
+      );
+      if (!active.current) return;
+      setBrowserRequest(current => current ? { ...current, status: 'success' } : current);
+      const delay = motionDelay();
+      if (delay > 0) await wait(delay);
+      if (active.current) {
+        browserCredentials.current = null;
+        browserAuthenticationInProgress.current = false;
+        setUser(profile);
+        setBrowserRequest(null);
+        setError(null);
+      }
+    } catch (verificationFailure) {
+      browserAuthenticationInProgress.current = false;
+      if (!active.current) return;
+      const recoverable = recoverableOtpError(verificationFailure);
+      if (recoverable) {
+        setVerificationError(recoverable);
+        setBrowserRequest(current => current ? { ...current, status: 'pending' } : current);
+      } else {
+        browserCredentials.current = null;
+        setBrowserRequest(null);
+        setError(browserErrorMessage(verificationFailure));
+      }
+    } finally {
+      verificationInFlight.current = false;
+    }
+  }, []);
 
   const cancelBrowserLogin = useCallback(() => {
-    stopPolling();
+    if (verificationInFlight.current) return;
+    browserCredentials.current = null;
     setBrowserRequest(null);
+    setVerificationError(null);
     setError(null);
-  }, [stopPolling]);
+  }, []);
 
-  return { user, loading, error, browserRequest, startBrowserLogin, cancelBrowserLogin };
+  return {
+    user,
+    loading,
+    error,
+    verificationError,
+    browserRequest,
+    startBrowserLogin,
+    verifyBrowserOtp,
+    cancelBrowserLogin,
+  };
 }

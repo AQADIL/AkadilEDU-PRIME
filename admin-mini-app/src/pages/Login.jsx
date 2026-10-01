@@ -1,105 +1,178 @@
-import { ArrowUpRight, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { ArrowRight, Check } from 'lucide-react';
 import './Login.css';
 
-export default function Login({ error, browserRequest, onStartBrowserLogin, onCancelBrowserLogin }) {
+const otpLength = 4;
+
+export default function Login({
+  error,
+  verificationError,
+  browserRequest,
+  onStartBrowserLogin,
+  onVerifyBrowserOtp,
+}) {
+  const [otp, setOtp] = useState('');
+  const inputRef = useRef(null);
+  const submittedOtp = useRef('');
   const creating = browserRequest?.status === 'creating';
-  const pending = browserRequest?.status === 'pending';
+  const pending = browserRequest && !creating;
+  const verifying = browserRequest?.status === 'verifying';
+  const success = browserRequest?.status === 'success';
+
+  const submitOtp = useCallback((value) => {
+    if (!/^\d{4}$/.test(value) || verifying || success || submittedOtp.current === value) return;
+    submittedOtp.current = value;
+    onVerifyBrowserOtp(value).catch(() => {
+      submittedOtp.current = '';
+    });
+  }, [onVerifyBrowserOtp, success, verifying]);
+
+  useEffect(() => {
+    if (!pending || verifying || success) return undefined;
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [pending, success, verifying]);
+
+  useEffect(() => {
+    if (!verificationError) return undefined;
+    submittedOtp.current = '';
+    const frame = window.requestAnimationFrame(() => {
+      setOtp('');
+      inputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [verificationError]);
+
+  useEffect(() => {
+    if (otp.length !== otpLength || verifying || success || submittedOtp.current === otp) return undefined;
+    const timer = window.setTimeout(() => submitOtp(otp), 180);
+    return () => window.clearTimeout(timer);
+  }, [otp, submitOtp, success, verifying]);
+
+  const handleOtpChange = (event) => {
+    const nextOtp = event.target.value.replace(/\D/g, '').slice(0, otpLength);
+    if (nextOtp.length < otpLength) submittedOtp.current = '';
+    setOtp(nextOtp);
+  };
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+    submitOtp(otp);
+  };
+
+  const handleRequestCode = () => {
+    submittedOtp.current = '';
+    setOtp('');
+    onStartBrowserLogin().catch(() => undefined);
+  };
 
   return (
     <main className={`login-shell${pending ? ' is-pending' : ''}`}>
       <header className="login-header">
         <span className="login-wordmark" translate="no">AkadilEDU</span>
-        <div className="login-header-meta" aria-label="Sign-in context">
-          <span>Admin access</span>
-          <span>Session-only sign in</span>
-        </div>
       </header>
 
       <div className="login-composition">
         <section className="login-intro" aria-labelledby="login-title">
-          <div>
-            <p className="login-label">Browser sign in</p>
-            <h1 id="login-title">
-              {pending ? (
-                <>Match the code.<br />Approve access.</>
-              ) : (
-                <>Admin access,<br />approved by you.</>
-              )}
-            </h1>
-            <p className="login-intro-copy">
-              {pending
-                ? 'Your browser stays locked until you approve this exact request in Telegram.'
-                : 'Use your existing Telegram identity. No separate password, no credentials to remember.'}
-            </p>
-          </div>
+          <h1 id="login-title">
+            {pending ? <>Check<br />Telegram.</> : <>Secure<br />access.</>}
+          </h1>
         </section>
 
         <section className="login-action" aria-labelledby="login-action-title">
-          <div className="login-action-content" key={pending ? 'pending' : 'ready'}>
+          <div className="login-action-content">
             {error && (
               <div className="login-error" role="alert" aria-live="assertive">
-                <strong>Unable to sign in</strong>
-                <span>{error}</span>
+                {error}
               </div>
             )}
 
             {!pending ? (
               <>
-                <p className="login-step">Telegram verification</p>
-                <h2 id="login-action-title">Continue from your phone.</h2>
-                <p className="login-description">
-                  We will send a one-time approval request to the AkadilEDU bot. Only an authorized administrator can approve it.
-                </p>
+                <h2 id="login-action-title">Sign In</h2>
+                <p className="login-description">Receive a 4-digit code in Telegram.</p>
                 <button
                   type="button"
                   disabled={creating}
                   aria-busy={creating}
-                  data-loading={creating ? 'true' : 'false'}
-                  onClick={onStartBrowserLogin}
-                  className="login-primary"
+                  onClick={handleRequestCode}
+                  className="login-request"
                 >
-                  <span>{creating ? 'Preparing secure request…' : 'Continue with Telegram'}</span>
-                  <ArrowUpRight aria-hidden="true" />
+                  <span>{creating ? 'Requesting…' : 'Get Code'}</span>
+                  <ArrowRight aria-hidden="true" />
                 </button>
-                <p className="login-assurance">The request expires automatically and can be used only once.</p>
               </>
             ) : (
               <>
-                <p className="login-step">Telegram verification</p>
-                <h2 id="login-action-title">Confirm this code.</h2>
-                <p className="login-description">
-                  Open the bot and approve the request only if the same code appears there.
-                </p>
-                <output className="login-code" aria-label={`Matching code ${browserRequest.displayCode}`} translate="no">
-                  {browserRequest.displayCode}
-                </output>
-                <a
-                  href={browserRequest.botUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="login-primary"
-                >
-                  <span>Open approval in Telegram</span>
-                  <ArrowUpRight aria-hidden="true" />
-                </a>
-                <div className="login-status" role="status" aria-live="polite">
-                  <span>Status</span>
-                  <strong>Waiting for your approval</strong>
+                <h2 id="login-action-title">Enter the Code</h2>
+                <p className="login-description">Sent by <span translate="no">@akadiledu_bot</span></p>
+
+                <form className="otp-form" onSubmit={handleSubmit}>
+                  <label
+                    className={`otp-field${verificationError ? ' is-invalid' : ''}${verifying ? ' is-verifying' : ''}${success ? ' is-success' : ''}`}
+                  >
+                    <span className="otp-visually-hidden">Telegram login code, 4 digits</span>
+                    <input
+                      ref={inputRef}
+                      className="otp-native-input"
+                      name="otp"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="one-time-code"
+                      pattern="[0-9]*"
+                      maxLength={otpLength}
+                      spellCheck={false}
+                      value={otp}
+                      disabled={verifying || success}
+                      aria-invalid={verificationError ? 'true' : 'false'}
+                      aria-describedby={verificationError ? 'otp-error' : 'otp-status'}
+                      onChange={handleOtpChange}
+                    />
+                    <span className="otp-slots" aria-hidden="true">
+                      {Array.from({ length: otpLength }, (_, index) => {
+                        const digit = otp[index] || '';
+                        const active = !verifying && !success && Math.min(otp.length, otpLength - 1) === index;
+                        return (
+                          <span
+                            className={`otp-slot${digit ? ' has-value' : ''}${active ? ' is-active' : ''}`}
+                            style={{ '--otp-index': index }}
+                            key={index}
+                          >
+                            <span className="otp-digit">{digit}</span>
+                          </span>
+                        );
+                      })}
+                    </span>
+                    {success && (
+                      <span className="otp-success-mark" aria-hidden="true">
+                        <Check />
+                      </span>
+                    )}
+                  </label>
+
+                  <div className="otp-feedback" aria-live="polite">
+                    {verificationError ? (
+                      <span id="otp-error" className="otp-error" role="alert">{verificationError}</span>
+                    ) : (
+                      <span id="otp-status">{verifying ? 'Checking Code' : success ? 'Code Verified' : ''}</span>
+                    )}
+                  </div>
+                </form>
+
+                <div className="login-links">
+                  <a href={browserRequest.botUrl} target="_blank" rel="noopener noreferrer">
+                    <span>Open Telegram</span>
+                    <ArrowRight aria-hidden="true" />
+                  </a>
+                  <button type="button" disabled={verifying || success} onClick={handleRequestCode}>
+                    Request Another Code
+                  </button>
                 </div>
-                <button type="button" onClick={onCancelBrowserLogin} className="login-cancel">
-                  <span>Cancel request</span>
-                  <X aria-hidden="true" />
-                </button>
               </>
             )}
           </div>
         </section>
       </div>
-
-      <footer className="login-footer">
-        <span>Private by design. No password stored.</span>
-        <span>Browser access ends when this session closes.</span>
-      </footer>
     </main>
   );
 }

@@ -17,18 +17,17 @@ function AppContent() {
     user,
     loading,
     error,
+    verificationError,
     browserRequest,
     startBrowserLogin,
+    verifyBrowserOtp,
     cancelBrowserLogin,
   } = useTelegramAuth();
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400 mx-auto"></div>
-          <p className="mt-4 text-white/70">Loading...</p>
-        </div>
+      <div className="flex min-h-[100dvh] items-center justify-center bg-[#08090b] text-[#f4f3ef]">
+        <span className="text-sm tracking-[0.18em] text-white/50">AkadilEDU</span>
       </div>
     );
   }
@@ -37,8 +36,10 @@ function AppContent() {
     return (
       <Login
         error={error}
+        verificationError={verificationError}
         browserRequest={browserRequest}
         onStartBrowserLogin={startBrowserLogin}
+        onVerifyBrowserOtp={verifyBrowserOtp}
         onCancelBrowserLogin={cancelBrowserLogin}
       />
     );
