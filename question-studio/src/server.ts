@@ -11,6 +11,10 @@ import { startWorker, pauseWorker, waitForWorker, publishQuestions, rerenderQues
 import { closeRenderer } from './render.js';
 import { publicState } from './public-state.js';
 
+if (config.executionOwner === 'google-apps-script') {
+  await releaseLock();
+  throw new Error('Generation has migrated to Google Apps Script. Pause its trigger and restore the authoritative cloud state before enabling local execution.');
+}
 const csrfToken = randomBytes(32).toString('hex');
 let mutating = false;
 const contentTypes: Record<string, string> = {

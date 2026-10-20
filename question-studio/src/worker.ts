@@ -258,6 +258,7 @@ async function loop() {
   }
 }
 export function startWorker() {
+  if (config.executionOwner === 'google-apps-script') throw new Error('This run belongs to the cloud worker; local generation is disabled');
   if (running) throw new Error('Генерация уже выполняется');
   pauseRequested = false;
   running = loop();
