@@ -40,6 +40,8 @@ Choose source parsing and paste text that you are entitled to process. The model
 
 ## Costs and recovery
 
+`STUDIO_RECOVERY_BACKOFF_MS` controls the recovery delay after prolonged temporary response-retrieval failures. The worker honors a longer provider `Retry-After`, preserves the existing response ID and reservation, and resumes retrieving the same request when connectivity returns. Pausing interrupts this recovery wait. Authentication failures and inconsistent accounting remain explicit stops.
+
 `STUDIO_API_MAX_ATTEMPTS` bounds automatic replacement requests after known recoverable API failures. A response that ends at `max_output_tokens` may be retried with a larger output allowance, capped by `STUDIO_RETRY_MAX_OUTPUT_TOKENS`. Each attempt retains its own response ID, usage, price snapshot and retry links. Both the failed attempt and its replacement count toward the same budget. Unknown request outcomes and unreconciled usage still stop processing to avoid duplicate charges.
 
 `STUDIO_REPAIR_MAX_ATTEMPTS` bounds correction rounds for each rejected question. `STUDIO_MAX_TOPIC_FAILURES` bounds consecutive request failures for a topic in generation mode; exhausted topics are deferred while other eligible topics continue. Pausing preserves the current attempt, and resuming continues from saved request IDs. Reaching the total budget prevents further paid calls, including retries and corrections.

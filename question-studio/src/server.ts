@@ -117,7 +117,10 @@ function publicState() {
     autoPublish: config.autoPublish,
     pricing: { generation: config.prices, review: config.reviewPrices },
     repairTotals: {
-      queued: state.questions.filter(question => question.repair?.status === 'pending' || question.repair?.status === 'running').length,
+      queued: state.questions.filter(question => !question.validation.passed
+        && (!state.selectedTopicIds.length || state.selectedTopicIds.includes(question.topic))
+        && question.repair?.status !== 'exhausted' && question.repair?.status !== 'completed'
+        && (question.repair?.status === 'running' || (question.repair?.attempts || 0) < config.repairMaxAttempts)).length,
       completed: state.questions.filter(question => question.repair?.status === 'completed').length,
       exhausted: state.questions.filter(question => question.repair?.status === 'exhausted').length,
     },

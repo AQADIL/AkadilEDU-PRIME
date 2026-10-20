@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { config } from './config.js';
 import { state, event, save, safeError } from './store.js';
-import { runStructured, BudgetError, RecoverableApiError, RequestPausedError } from './provider.js';
+import { runStructured, BudgetError, RecoverableApiError, RequestPausedError, ResponsePollingError } from './provider.js';
 import { generationPrompt, reviewPrompt } from './prompts.js';
 import { generationSchema, reviewSchema, languages, difficulties, type Difficulty, type StoredQuestion, type Topic } from './schema.js';
 import { saveQuestionToDatabase, uploadImage } from './database.js';
@@ -214,6 +215,12 @@ async function loop() {
         await generateBatch(topic);
       } catch (error) {
         if (error instanceof RequestPausedError) break;
+        if (error instanceof ResponsePollingError) {
+          await event('Связь с OpenAI временно недоступна. Ожидаю восстановления; оплаченный запрос сохранён и повторно не отправляется.', 'warning');
+          const until = Date.now() + error.retryAfterMs;
+          while (!pauseRequested && Date.now() < until) await delay(Math.min(1000, until - Date.now()));
+          continue;
+        }
         if (!(error instanceof RecoverableApiError || error instanceof BatchContentError) || state.mode === 'parse') throw error;
         const topic = state.topics.find(item => item.id === state.activeTopicId);
         if (topic) topic.requestFailures = (topic.requestFailures || 0) + 1;

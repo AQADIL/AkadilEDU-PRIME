@@ -33,6 +33,11 @@ const responseSchema = z.object({
 
 export class BudgetError extends Error {}
 export class RequestPausedError extends Error {}
+export class ResponsePollingError extends Error {
+  constructor(readonly retryAfterMs: number) {
+    super('OpenAI временно недоступен. Сохранённый ответ будет получен после восстановления связи без нового платного запроса.');
+  }
+}
 export class RecoverableApiError extends Error {
   constructor(readonly callId: string, readonly reason: string) {
     super(`Запрос ${callId}: ${reason}. Задание отложено после ограниченного числа попыток.`);
@@ -286,8 +291,12 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
           ? error.status === 408 || error.status === 429 || error.status >= 500
           : error instanceof TypeError || (error instanceof Error && ['AbortError', 'TimeoutError'].includes(error.name));
         pollFailures += 1;
-        if (!transient || pollFailures >= 12 || (error instanceof HttpError && (error.retryAfterMs ?? 0) > 60000)) throw error;
+        if (!transient) throw error;
         if (shouldPause?.()) throw new RequestPausedError('Получение ответа отложено до продолжения работы.');
+        if (pollFailures >= 12 || (error instanceof HttpError && (error.retryAfterMs ?? 0) > 60000)) {
+          throw new ResponsePollingError(Math.max(config.recoveryBackoffMs,
+            error instanceof HttpError ? error.retryAfterMs ?? 0 : 0));
+        }
         const wait = Math.max(Math.min(2000 * 2 ** (pollFailures - 1), 30000),
           error instanceof HttpError ? error.retryAfterMs ?? 0 : 0);
         await event(`OpenAI временно недоступен; получение уже оплаченного ответа будет повторено через ${Math.ceil(wait / 1000)} с.`, 'warning');
