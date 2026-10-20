@@ -8,7 +8,8 @@ import { diagramSvg } from './diagram.js';
 import { arrangeDiagramLabels } from './diagramLayout.js';
 
 let browser: Browser | undefined;
-export class DiagramLayoutError extends Error {}
+export class QuestionRenderError extends Error {}
+export class DiagramLayoutError extends QuestionRenderError {}
 const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 export async function closeRenderer() { await browser?.close(); browser = undefined; }
 
@@ -58,14 +59,19 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
       if (containsStatement && /\$/.test(text)) {
         await page.addScriptTag({ path: path.join(studioRoot, 'node_modules/katex/dist/katex.min.js') });
         await page.addScriptTag({ path: path.join(studioRoot, 'node_modules/katex/dist/contrib/auto-render.min.js') });
-        await page.evaluate(() => {
+        try { await page.evaluate(() => {
           const renderer = (globalThis as unknown as { renderMathInElement: (element: Element, options: object) => void }).renderMathInElement;
           renderer(document.getElementById('statement')!, {
             delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }],
             throwOnError: true, trust: false, maxExpand: 1000, strict: 'error',
             errorCallback(message: string) { throw new Error(message); },
           });
-        });
+        }); } catch (error) {
+          if (error instanceof Error && /KaTeX parse error|ParseError/.test(error.message)) {
+            throw new QuestionRenderError('Некорректная формула LaTeX: ' + error.message.slice(0, 300));
+          }
+          throw error;
+        }
       }
       await page.evaluate(() => document.fonts.ready);
       if (question.diagram) {
@@ -78,7 +84,7 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
         }
       }
       const height = await page.locator('article').evaluate(element => element.scrollHeight);
-      if (height > 6000) throw new Error('Question image exceeds readable size');
+      if (height > 6000) throw new QuestionRenderError('Question image exceeds readable size');
       const filename = path.join(directory, `${question.id}-${language}.png`);
       const pixels = await page.locator('article').screenshot();
       await sharp(pixels).png({ compressionLevel: 9, palette: true, colours: 64 }).toFile(filename);

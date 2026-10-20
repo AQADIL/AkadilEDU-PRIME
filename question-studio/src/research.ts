@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { config } from './config.js';
 import { event, save } from './store.js';
-import { runStructured, sourceUrl } from './provider.js';
+import { runStructured, sourceUrl, RecoverableApiError } from './provider.js';
 import type { ReferenceSource, Topic, TopicResearch } from './schema.js';
 
 const researchSchema = z.strictObject({
@@ -26,14 +26,21 @@ EXACT URLs from the tool's actual results. Do not invent or repair URLs. Do not 
 were not returned or opened by the tool. All claims in the summary must be supported by these sources.
 If the tool provides no usable sources, return summary="" and sources=[]. Output only the strict schema.`;
 
-export async function researchTopic(topic: Topic): Promise<TopicResearch | undefined> {
+export async function researchTopic(topic: Topic, shouldPause?: () => boolean): Promise<TopicResearch | undefined> {
   if (!topic.eligible || !topic.id.startsWith('geometry_')) return undefined;
   if (topic.research) return topic.research;
+  if (topic.researchUnavailable) return undefined;
   if (!config.webSearchEnabled && !topic.researchCallId) return undefined;
   await event(`${topic.name}: проверяю источники и требования к чертежам.`, 'info', topic.id);
   const result = await runStructured('research', researchPrompt, {
     topic: { id: topic.id, name: topic.name, path: topic.path },
-  }, researchSchema, id => { topic.researchCallId = id; }, topic.researchCallId);
+  }, researchSchema, id => { topic.researchCallId = id; }, topic.researchCallId, shouldPause).catch(async (error: unknown) => {
+    if (!(error instanceof RecoverableApiError)) throw error;
+    topic.researchUnavailable = true;
+    await event('Поиск источников исчерпал попытки. Продолжаю создание оригинальных задач без внешних источников.', 'warning', topic.id);
+    return undefined;
+  });
+  if (!result) return undefined;
   const actualSources = new Map(result.sources.map(source => [source.url, source]));
   const verified = new Map<string, ReferenceSource>();
   for (const source of result.data.sources) {
