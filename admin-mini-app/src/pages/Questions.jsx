@@ -3,10 +3,14 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Filter, Trash2, Save, Upload, Check, X, Copy, SquarePen, ChevronDown, ChevronRight, ChevronLeft, Folder, FolderOpen, FileText, ArrowLeft, Image as ImageIcon, Loader2, CheckSquare, Square, ListChecks } from 'lucide-react';
 import { useTheme } from '../contexts/theme';
-import { getQuestions, createQuestion, updateQuestion, deleteQuestion, getTopics, validateQuestion } from '../services/questions';
+import { getQuestions, createQuestion, updateQuestion, deleteQuestion, getTopics, validateQuestion, questionLanguages, questionContent } from '../services/questions';
 import { compressImage, uploadImageToStorage, deleteImageFromStorage, processTextWithLatex, detectLatexInText } from '../services/imageUtils';
 import { storage, storageRef } from '../lib/firebase';
 import LatexPreviewCard from '../components/LatexPreviewCard';
+
+function questionImageUrls(question) {
+  return new Set([question?.imageUrl, ...Object.values(question?.translations || {}).map(content => content.imageUrl)].filter(Boolean));
+}
 
 export default function Questions() {
   const { currentTheme } = useTheme();
@@ -43,6 +47,7 @@ export default function Questions() {
   const [animationType, setAnimationType] = useState(null);
   const [mobileTopicPath, setMobileTopicPath] = useState([]);
   const [templateCopied, setTemplateCopied] = useState(false);
+  const [activeLanguage, setActiveLanguage] = useState('kk');
   const [formData, setFormData] = useState({
     text: '',
     options: ['', '', '', ''],
@@ -54,6 +59,27 @@ export default function Questions() {
     status: 'published',
     imageUrl: ''
   });
+
+  const activeContent = activeLanguage === 'kk' ? questionContent(formData)
+    : questionContent(formData.translations?.[activeLanguage]);
+
+  const updateLocalizedContent = (changes) => {
+    setFormData(current => {
+      const content = { ...questionContent(activeLanguage === 'kk' ? current : current.translations?.[activeLanguage]), ...changes };
+      return {
+        ...current,
+        ...(activeLanguage === 'kk' ? content : {}),
+        translations: { kk: questionContent(current), ...current.translations, [activeLanguage]: content },
+      };
+    });
+  };
+
+  const switchLanguage = (language) => {
+    setActiveLanguage(language);
+    const content = language === 'kk' ? questionContent(formData) : questionContent(formData.translations?.[language]);
+    setImagePreview(content.imageUrl || null);
+    setShowLatexPreview(detectLatexInText(content.text).length > 0);
+  };
 
   useEffect(() => {
     let active = true;
@@ -75,7 +101,7 @@ export default function Questions() {
   }, []);
 
   const filteredQuestions = questions.filter(q =>
-    (q.text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    ([q, ...Object.values(q.translations || {})].some(content => content.text?.toLowerCase().includes(searchQuery.toLowerCase())) ||
     q.topic?.toLowerCase().includes(searchQuery.toLowerCase())) &&
     (!selectedTopicFilter || q.topic === selectedTopicFilter)
   );
@@ -122,7 +148,7 @@ export default function Questions() {
   };
 
   const handleMobileTopicClick = (topic) => {
-    const isLast = topic.isLast !== false;
+    const isLast = topic.isLast === true;
     if (!isLast) {
       setMobileTopicPath([...mobileTopicPath, topic]);
     } else {
@@ -133,7 +159,7 @@ export default function Questions() {
   const handleMobileTopicBack = () => {
     if (mobileTopicPath.length > 0) {
       const currentTopic = mobileTopicPath[mobileTopicPath.length - 1];
-      const isLast = currentTopic.isLast !== false;
+      const isLast = currentTopic.isLast === true;
 
       if (isLast) {
         setSelectedTopicFilter('');
@@ -167,7 +193,7 @@ export default function Questions() {
     const hasChildren = topic.children && topic.children.length > 0;
     const isExpanded = expandedTopicNodes.has(topic.id);
     const isSelected = selectedTopicFilter === topic.id;
-    const isLast = topic.isLast !== false;
+    const isLast = topic.isLast === true;
     const isCentered = !selectedTopicFilter;
 
     return (
@@ -252,12 +278,12 @@ export default function Questions() {
     try {
       validateQuestion(formData);
       const selectedTopic = topics.find(topic => topic.id === formData.topic);
-      if (!selectedTopic || selectedTopic.isLast === false) {
+      if (!selectedTopic || selectedTopic.isLast !== true) {
         throw new Error('Select an existing leaf topic.');
       }
       let finalImageUrl = formData.imageUrl;
 
-      if (showLatexPreview && !finalImageUrl) {
+      if (detectLatexInText(formData.text).length > 0 && !finalImageUrl) {
         const latexImage = await processTextWithLatex(formData.text);
         if (latexImage) {
           const imagePath = `questions/${crypto.randomUUID()}/latex_${crypto.randomUUID()}.png`;
@@ -266,7 +292,14 @@ export default function Questions() {
         }
       }
 
-      await createQuestion({ ...formData, imageUrl: finalImageUrl });
+      await createQuestion({
+        ...formData,
+        imageUrl: finalImageUrl,
+        ...(formData.translations ? { translations: {
+          ...formData.translations,
+          kk: { ...questionContent(formData), imageUrl: finalImageUrl },
+        } } : {}),
+      });
       saved = true;
       const newQuestions = await getQuestions();
       setQuestions(newQuestions);
@@ -296,11 +329,14 @@ export default function Questions() {
       validateQuestion(formData);
       await updateQuestion(editingQuestion.id, formData);
       saved = true;
-      if (editingQuestion.imageUrl && editingQuestion.imageUrl !== formData.imageUrl) {
-        try {
-          await deleteManagedImage(editingQuestion.imageUrl);
-        } catch {
-          alert('Question saved, but the old image could not be removed.');
+      const retainedImages = questionImageUrls(formData);
+      for (const imageUrl of questionImageUrls(editingQuestion)) {
+        if (!retainedImages.has(imageUrl)) {
+          try {
+            await deleteManagedImage(imageUrl);
+          } catch {
+            alert('Question saved, but an old image could not be removed.');
+          }
         }
       }
       const newQuestions = await getQuestions();
@@ -328,7 +364,7 @@ export default function Questions() {
       const imagePath = `questions/${questionId}/image_${crypto.randomUUID()}.jpg`;
       const imageUrl = await uploadImageToStorage(compressedFile, imagePath);
 
-      setFormData({ ...formData, imageUrl });
+      updateLocalizedContent({ imageUrl });
       setImagePreview(imageUrl);
       setShowLatexPreview(false);
     } catch (error) {
@@ -339,7 +375,7 @@ export default function Questions() {
   };
 
   const handleTextChange = (text) => {
-    setFormData({ ...formData, text });
+    updateLocalizedContent({ text });
 
     const latexMatches = detectLatexInText(text);
     setShowLatexPreview(latexMatches.length > 0);
@@ -347,10 +383,10 @@ export default function Questions() {
 
   const handleRemoveImage = async () => {
     try {
-      if (formData.imageUrl && formData.imageUrl !== editingQuestion?.imageUrl) {
-        await deleteManagedImage(formData.imageUrl);
+      if (activeContent.imageUrl && !questionImageUrls(editingQuestion).has(activeContent.imageUrl)) {
+        await deleteManagedImage(activeContent.imageUrl);
       }
-      setFormData({ ...formData, imageUrl: '' });
+      updateLocalizedContent({ imageUrl: '' });
       setImagePreview(null);
       setShowLatexPreview(false);
     } catch (error) {
@@ -365,7 +401,7 @@ export default function Questions() {
         await deleteQuestion(questionId);
         setQuestions(current => current.filter(item => item.id !== questionId));
         try {
-          await deleteManagedImage(question?.imageUrl);
+          for (const imageUrl of questionImageUrls(question)) await deleteManagedImage(imageUrl);
         } catch {
           alert('Question deleted, but its image could not be removed.');
         }
@@ -377,6 +413,8 @@ export default function Questions() {
 
   const startEdit = (question) => {
     setEditingQuestion(question);
+    setActiveLanguage('kk');
+    const kazakh = questionContent(question.translations?.kk || question);
     setFormData({
       text: question.text || '',
       options: question.options || ['', '', '', ''],
@@ -386,17 +424,18 @@ export default function Questions() {
       difficulty: question.difficulty || 'medium',
       topic: question.topic || '',
       status: question.status || 'published',
-      imageUrl: question.imageUrl || ''
+      ...kazakh,
+      ...(question.translations ? { translations: question.translations } : {}),
     });
     if (question.topic) {
       setTopicSearch(getTopicPath(question.topic));
     }
-    if (question.imageUrl) {
-      setImagePreview(question.imageUrl);
-    }
+    setImagePreview(kazakh.imageUrl || null);
+    setShowLatexPreview(detectLatexInText(kazakh.text).length > 0);
   };
 
   const resetForm = () => {
+    setActiveLanguage('kk');
     setFormData({
       text: '',
       options: ['', '', '', ''],
@@ -418,8 +457,9 @@ export default function Questions() {
 
   const discardForm = async () => {
     try {
-      if (formData.imageUrl && formData.imageUrl !== editingQuestion?.imageUrl) {
-        await deleteManagedImage(formData.imageUrl);
+      const existingImages = questionImageUrls(editingQuestion);
+      for (const imageUrl of questionImageUrls(formData)) {
+        if (!existingImages.has(imageUrl)) await deleteManagedImage(imageUrl);
       }
       setShowCreateForm(false);
       setEditingQuestion(null);
@@ -465,7 +505,7 @@ export default function Questions() {
         await deleteQuestion(questionId);
         setQuestions(current => current.filter(item => item.id !== questionId));
         try {
-          await deleteManagedImage(question?.imageUrl);
+          for (const imageUrl of questionImageUrls(question)) await deleteManagedImage(imageUrl);
         } catch {
           alert(`Question ${questionId} was deleted, but its image could not be removed.`);
         }
@@ -513,9 +553,9 @@ export default function Questions() {
   };
 
   const handleOptionChange = (index, value) => {
-    const newOptions = [...formData.options];
+    const newOptions = [...activeContent.options];
     newOptions[index] = value;
-    setFormData({ ...formData, options: newOptions });
+    updateLocalizedContent({ options: newOptions });
   };
 
   const getTopicPath = (topicId) => {
@@ -532,7 +572,7 @@ export default function Questions() {
     if (!searchTerm) return [];
     const lowerSearch = searchTerm.toLowerCase();
     return topics.filter(topic =>
-      topic.isLast !== false &&
+      topic.isLast === true &&
       ((topic.name || topic.id).toLowerCase().includes(lowerSearch) ||
       topic.id.toLowerCase().includes(lowerSearch))
     );
@@ -616,7 +656,7 @@ export default function Questions() {
   const handleBulkImport = () => {
     try {
       const selectedTopic = topics.find(topic => topic.id === selectedBulkTopic);
-      if (!selectedTopic || selectedTopic.isLast === false) {
+      if (!selectedTopic || selectedTopic.isLast !== true) {
         throw new Error('Select an existing leaf topic.');
       }
       const parsed = parseBulkQuestions(bulkText);
@@ -639,7 +679,7 @@ export default function Questions() {
 
   const handleConfirmBulkImport = async () => {
     const selectedTopic = topics.find(t => t.id === selectedBulkTopic);
-    if (!selectedTopic || selectedTopic.isLast === false) {
+    if (!selectedTopic || selectedTopic.isLast !== true) {
       alert('Select an existing leaf topic.');
       return;
     }
@@ -792,10 +832,27 @@ export default function Questions() {
 
             {!isBulkMode ? (
               <div className="space-y-4">
+                <div className="flex flex-wrap gap-2" role="group" aria-label="Question language">
+                  {questionLanguages.map(language => (
+                    <button
+                      key={language.code}
+                      type="button"
+                      aria-pressed={activeLanguage === language.code}
+                      disabled={isUploading}
+                      onClick={() => switchLanguage(language.code)}
+                      className={`px-4 py-2 rounded-xl border transition-colors ${activeLanguage === language.code ? 'border-white/40 bg-white/15 text-white' : 'border-white/10 text-white/60 hover:bg-white/10'} disabled:opacity-50`}
+                    >
+                      {language.label}
+                    </button>
+                  ))}
+                </div>
+                {activeLanguage !== 'kk' && !formData.translations?.[activeLanguage] && (
+                  <p className={`text-sm ${currentTheme.textSecondary}`}>This translation has not been added. The bot currently uses Kazakh.</p>
+                )}
                 <div>
                   <label className={`block text-sm ${currentTheme.textSecondary} mb-2 font-medium`}>Question</label>
                   <textarea
-                    value={formData.text}
+                    value={activeContent.text}
                     onChange={(e) => handleTextChange(e.target.value)}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
                     rows={3}
@@ -803,7 +860,7 @@ export default function Questions() {
                 </div>
 
                 {showLatexPreview && (
-                  <LatexPreviewCard text={formData.text} />
+                  <LatexPreviewCard text={activeContent.text} />
                 )}
 
                 <div>
@@ -854,7 +911,7 @@ export default function Questions() {
 
                 <div>
                   <label className={`block text-sm ${currentTheme.textSecondary} mb-2 font-medium`}>Options</label>
-                  {formData.options.map((option, index) => (
+                  {activeContent.options.map((option, index) => (
                     <div key={index} className="flex gap-3 mb-3">
                       <span className={`${currentTheme.textSecondary} w-8 mt-3 font-medium`}>{['A)', 'B)', 'C)', 'D)'][index]}</span>
                       <input
@@ -938,8 +995,8 @@ export default function Questions() {
                 <div>
                   <label className={`block text-sm ${currentTheme.textSecondary} mb-2 font-medium`}>Explanation</label>
                   <textarea
-                    value={formData.explanation}
-                    onChange={(e) => setFormData({ ...formData, explanation: e.target.value })}
+                    value={activeContent.explanation}
+                    onChange={(e) => updateLocalizedContent({ explanation: e.target.value })}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
                     rows={2}
                   />
@@ -949,14 +1006,15 @@ export default function Questions() {
                   <label className={`block text-sm ${currentTheme.textSecondary} mb-2 font-medium`}>Hint</label>
                   <input
                     type="text"
-                    value={formData.hint}
-                    onChange={(e) => setFormData({ ...formData, hint: e.target.value })}
+                    value={activeContent.hint}
+                    onChange={(e) => updateLocalizedContent({ hint: e.target.value })}
                     className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
                   />
                 </div>
 
                 <button
                   onClick={editingQuestion ? handleUpdate : handleCreate}
+                  disabled={isUploading}
                   className="w-full flex items-center justify-center gap-2 bg-white/10 backdrop-blur-xl border border-white/20 text-white px-6 py-4 rounded-2xl font-medium hover:bg-white/20 transition-all shadow-lg hover:shadow-xl"
                 >
                   <Save className="w-5 h-5" />
@@ -1182,7 +1240,7 @@ Difficulty: medium`;
 
                   <div className="space-y-2 max-h-[50vh] overflow-y-auto overflow-x-hidden">
                     {getCurrentMobileTopics().map(topic => {
-                      const isLast = topic.isLast !== false;
+                      const isLast = topic.isLast === true;
 
                       return (
                         <button

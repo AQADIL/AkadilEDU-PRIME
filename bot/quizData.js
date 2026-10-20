@@ -1,5 +1,6 @@
 const { randomInt } = require('node:crypto');
 const { db } = require('./firebase');
+const { localizeQuestion, questionLanguages, validQuestionContent } = require('./questionI18n');
 
 const safeId = /^[A-Za-z0-9_-]{1,80}$/;
 
@@ -9,15 +10,15 @@ function assertId(id) {
 }
 
 function validQuestion(id, question) {
+  const content = localizeQuestion(question, 'kk');
   return safeId.test(id) && id.length <= 50 && question && question.status === 'published'
-    && typeof question.text === 'string' && question.text.length <= 3500
-    && (question.text.trim().length > 0 || (typeof question.imageUrl === 'string' && /^https:\/\//.test(question.imageUrl)))
-    && Array.isArray(question.options)
-    && question.options.length === 4
-    && question.options.every((option) => typeof option === 'string' && option.trim().length > 0 && option.length <= 500)
+    && content
+    && (!question.translations || (typeof question.translations === 'object'
+      && !Array.isArray(question.translations)
+      && Object.entries(question.translations).every(([language, value]) =>
+        questionLanguages.includes(language) && validQuestionContent(value))))
     && Number.isInteger(question.correctOption)
-    && question.correctOption >= 0 && question.correctOption < question.options.length
-    && (!question.imageUrl || (typeof question.imageUrl === 'string' && /^https:\/\//.test(question.imageUrl)));
+    && question.correctOption >= 0 && question.correctOption < content.options.length;
 }
 
 async function getQuestion(questionId) {
@@ -51,7 +52,7 @@ function topicOf(question) {
 
 function formatQuestion(header, question) {
   const options = question.options.map((option, index) => `${String.fromCharCode(65 + index)}) ${option}`);
-  return [header, question.text?.trim(), ...options].filter(Boolean).join('\n\n');
+  return [header, question.imageUrl ? '' : question.text?.trim(), ...options].filter(Boolean).join('\n\n');
 }
 
 function splitMessage(value) {

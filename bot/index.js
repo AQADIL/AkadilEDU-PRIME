@@ -2,6 +2,7 @@ const { Bot, InlineKeyboard } = require('grammy');
 const { randomUUID } = require('node:crypto');
 const { db, transactionLoaded, transactionExisting } = require('./firebase');
 const { t, normalizeLanguage } = require('./i18n');
+const { localizeQuestion } = require('./questionI18n');
 const { generateBrowserOtp, digestBrowserOtp } = require('./browserAuthOtp');
 const { assertId, getQuestion, listQuestions, shuffle, topicOf, findSimilar, formatQuestion, splitMessage } = require('./quizData');
 
@@ -141,7 +142,7 @@ function questionKeyboard(question) {
 
 async function sendPracticeQuestion(ctx, session) {
   const language = await languageFor(ctx);
-  const question = await getQuestion(session.currentQuestionId);
+  const question = localizeQuestion(await getQuestion(session.currentQuestionId), language);
   if (!question) return ctx.reply(t(language, 'invalid'));
   const header = t(language, 'question', session.index + 1);
   const body = formatQuestion(header, question);
@@ -199,7 +200,7 @@ async function startPractice(ctx, mode, topicId, publicationId) {
 async function answerPractice(ctx, questionId, selectedOption) {
   const id = userId(ctx);
   const language = await languageFor(ctx);
-  const question = await getQuestion(questionId);
+  const question = localizeQuestion(await getQuestion(questionId), language);
   if (!question || selectedOption >= question.options.length) {
     return ctx.answerCallbackQuery({ text: t(language, 'invalid'), show_alert: true });
   }
@@ -258,7 +259,7 @@ async function getChannelAttempt(publicationId, id) {
 
 function publicationQuestion(publication, questionId) {
   const value = publication.questionData?.[questionId];
-  return value && Array.isArray(value.options) && Number.isInteger(value.correctOption)
+  return localizeQuestion(value, 'kk') && Number.isInteger(value.correctOption)
     ? { id: questionId, ...value } : null;
 }
 
@@ -289,16 +290,19 @@ async function showMistake(ctx, publicationId, index) {
   if (index >= mistakes.length) return ctx.reply(t(language, 'invalid'));
   const questionId = mistakes[index];
   const answer = attempt?.answers?.[questionId];
-  const question = publicationQuestion(publication, questionId);
+  const question = localizeQuestion(publicationQuestion(publication, questionId), language);
   if (!question) return ctx.reply(t(language, 'invalid'));
   const keyboard = new InlineKeyboard();
   if (index + 1 < mistakes.length) keyboard.text(t(language, 'next'), `review:${publicationId}:${index + 1}`).row();
   keyboard.text(t(language, 'similar'), `similar:${publicationId}`);
   if (question.imageUrl) await ctx.replyWithPhoto(question.imageUrl);
-  await ctx.reply(t(language, 'reviewQuestion', question.text,
+  const review = t(language, 'reviewQuestion', question.imageUrl ? '' : question.text,
     answer ? question.options[answer.selectedOption] : t(language, 'notAnswered'),
-    question.options[question.correctOption], question.explanation),
-  { reply_markup: keyboard });
+    question.options[question.correctOption], question.explanation);
+  const chunks = splitMessage(review);
+  for (const [chunkIndex, chunk] of chunks.entries()) {
+    await ctx.reply(chunk, chunkIndex === chunks.length - 1 ? { reply_markup: keyboard } : {});
+  }
 }
 
 async function answerChannel(ctx, publicationId, questionIndex, selectedOption) {
@@ -315,7 +319,7 @@ async function answerChannel(ctx, publicationId, questionIndex, selectedOption) 
     return ctx.answerCallbackQuery({ text: t(language, 'closed'), show_alert: true });
   }
   const questionId = publication.questions[questionIndex];
-  const question = publicationQuestion(publication, questionId);
+  const question = localizeQuestion(publicationQuestion(publication, questionId), language);
   if (!question || selectedOption >= question.options.length) {
     return ctx.answerCallbackQuery({ text: t(language, 'invalid'), show_alert: true });
   }

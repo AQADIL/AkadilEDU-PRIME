@@ -3,6 +3,7 @@ const { Api, InlineKeyboard } = require('grammy');
 const { db, transactionLoaded, transactionExisting } = require('./firebase');
 const { assertId, listQuestions, shuffle, topicOf, formatQuestion, splitMessage } = require('./quizData');
 const { t, normalizeLanguage } = require('./i18n');
+const { localizeQuestion } = require('./questionI18n');
 
 function timestamp(value) {
   const result = value instanceof Date ? value.getTime() : value;
@@ -115,7 +116,7 @@ async function advancePublication(publicationId, now, api) {
       return true;
     }
     const questionId = publication.questions[nextIndex];
-    const value = publication.questionData?.[questionId];
+    const value = localizeQuestion(publication.questionData?.[questionId], publication.language);
     if (!value || !Array.isArray(value.options) || !Number.isInteger(value.correctOption)) {
       throw new Error(`Question ${questionId} no longer exists or is invalid`);
     }

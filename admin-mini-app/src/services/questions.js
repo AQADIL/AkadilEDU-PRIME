@@ -3,6 +3,21 @@ import { db, ref, get, set, update, remove, push } from '../lib/firebase';
 const forbiddenDatabaseKeyCharacters = new Set(['.', '#', '$', '[', ']', '/']);
 const allowedStatuses = new Set(['draft', 'published']);
 const allowedDifficulties = new Set(['easy', 'medium', 'hard']);
+export const questionLanguages = Object.freeze([
+  { code: 'kk', label: 'Қазақша' },
+  { code: 'ru', label: 'Русский' },
+  { code: 'en', label: 'English' },
+]);
+
+export function questionContent(question = {}) {
+  return {
+    text: question.text || '',
+    options: question.options ? [...question.options] : ['', '', '', ''],
+    explanation: question.explanation || '',
+    hint: question.hint || '',
+    imageUrl: question.imageUrl || '',
+  };
+}
 
 function validDatabaseKey(value) {
   return typeof value === 'string' && value.length > 0 && value.trim() === value
@@ -15,6 +30,35 @@ function validDatabaseKey(value) {
 export function validateQuestion(questionData) {
   if (!questionData || typeof questionData !== 'object' || Array.isArray(questionData)) {
     throw new Error('Question data is required.');
+  }
+
+  let translations;
+  if (questionData.translations !== undefined) {
+    if (!questionData.translations || typeof questionData.translations !== 'object'
+      || Array.isArray(questionData.translations) || !questionData.translations.kk) {
+      throw new Error('Translations must include a Kazakh version.');
+    }
+    translations = {};
+    for (const [language, content] of Object.entries(questionData.translations)) {
+      if (!questionLanguages.some(item => item.code === language)
+        || !content || typeof content !== 'object' || Array.isArray(content)) {
+        throw new Error('Invalid question translation.');
+      }
+      try {
+        translations[language] = questionContent(validateQuestion({
+          ...questionData,
+          text: content.text,
+          options: content.options,
+          explanation: content.explanation,
+          hint: content.hint,
+          imageUrl: content.imageUrl,
+          translations: undefined,
+        }));
+      } catch (error) {
+        throw new Error(`${language.toUpperCase()}: ${error.message}`, { cause: error });
+      }
+    }
+    questionData = { ...questionData, ...translations.kk };
   }
 
   const text = typeof questionData.text === 'string' ? questionData.text.trim() : '';
@@ -76,12 +120,13 @@ export function validateQuestion(questionData) {
     difficulty: questionData.difficulty,
     explanation: explanation.trim(),
     hint: hint.trim(),
+    ...(translations ? { translations } : {}),
   };
 }
 
 async function validateTopic(topicId) {
   const topicSnapshot = await get(ref(db, `topics/${topicId}`));
-  if (!topicSnapshot.exists() || topicSnapshot.val()?.isLast === false) {
+  if (!topicSnapshot.exists() || topicSnapshot.val()?.isLast !== true) {
     throw new Error('Select an existing leaf topic.');
   }
 }
