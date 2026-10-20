@@ -52,7 +52,8 @@ function topicOf(question) {
 
 function formatQuestion(header, question) {
   const options = question.options.map((option, index) => `${String.fromCharCode(65 + index)}) ${option}`);
-  return [header, question.imageUrl ? '' : question.text?.trim(), ...options].filter(Boolean).join('\n\n');
+  const statement = question.imageUrl && question.imageContainsStatement !== false ? '' : question.text?.trim();
+  return [header, statement, ...options].filter(Boolean).join('\n\n');
 }
 
 function splitMessage(value) {

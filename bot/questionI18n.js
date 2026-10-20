@@ -18,6 +18,8 @@ function validQuestionContent(content) {
     && typeof content.text === 'string' && content.text.length <= 3500
     && (content.text.trim() || content.imageUrl)
     && validImageUrl(content.imageUrl)
+    && (content.imageContainsStatement === undefined || typeof content.imageContainsStatement === 'boolean')
+    && (content.imageContainsStatement !== false || content.text.trim())
     && Array.isArray(content.options) && content.options.length === 4
     && content.options.every((option) => typeof option === 'string' && option.trim() && option.length <= 500)
     && ['explanation', 'hint'].every((field) => content[field] === undefined
@@ -37,6 +39,7 @@ function localizeQuestion(question, language) {
     explanation: content.explanation || '',
     hint: content.hint || '',
     imageUrl: content.imageUrl || '',
+    imageContainsStatement: content.imageContainsStatement !== false,
   };
 }
 

@@ -282,6 +282,7 @@ export default function Questions() {
         throw new Error('Select an existing leaf topic.');
       }
       let finalImageUrl = formData.imageUrl;
+      let imageContainsStatement = formData.imageContainsStatement !== false;
 
       if (detectLatexInText(formData.text).length > 0 && !finalImageUrl) {
         const latexImage = await processTextWithLatex(formData.text);
@@ -289,15 +290,17 @@ export default function Questions() {
           const imagePath = `questions/${crypto.randomUUID()}/latex_${crypto.randomUUID()}.png`;
           finalImageUrl = await uploadImageToStorage(latexImage, imagePath);
           generatedImageUrl = finalImageUrl;
+          imageContainsStatement = true;
         }
       }
 
       await createQuestion({
         ...formData,
         imageUrl: finalImageUrl,
+        imageContainsStatement,
         ...(formData.translations ? { translations: {
           ...formData.translations,
-          kk: { ...questionContent(formData), imageUrl: finalImageUrl },
+          kk: { ...questionContent(formData), imageUrl: finalImageUrl, imageContainsStatement },
         } } : {}),
       });
       saved = true;
@@ -364,7 +367,7 @@ export default function Questions() {
       const imagePath = `questions/${questionId}/image_${crypto.randomUUID()}.jpg`;
       const imageUrl = await uploadImageToStorage(compressedFile, imagePath);
 
-      updateLocalizedContent({ imageUrl });
+      updateLocalizedContent({ imageUrl, imageContainsStatement: true });
       setImagePreview(imageUrl);
       setShowLatexPreview(false);
     } catch (error) {
@@ -386,7 +389,7 @@ export default function Questions() {
       if (activeContent.imageUrl && !questionImageUrls(editingQuestion).has(activeContent.imageUrl)) {
         await deleteManagedImage(activeContent.imageUrl);
       }
-      updateLocalizedContent({ imageUrl: '' });
+      updateLocalizedContent({ imageUrl: '', imageContainsStatement: true });
       setImagePreview(null);
       setShowLatexPreview(false);
     } catch (error) {
@@ -905,6 +908,15 @@ export default function Questions() {
                         alt="Question image"
                         className="max-w-full h-auto rounded-xl border border-white/20"
                       />
+                      <label className={`mt-3 flex items-center gap-2 text-sm ${currentTheme.textSecondary}`}>
+                        <input
+                          type="checkbox"
+                          checked={activeContent.imageContainsStatement}
+                          onChange={(event) => updateLocalizedContent({ imageContainsStatement: event.target.checked })}
+                          className="h-4 w-4 accent-blue-500"
+                        />
+                        Image includes the question text
+                      </label>
                     </div>
                   )}
                 </div>
@@ -1155,15 +1167,16 @@ Difficulty: medium`;
             <div className="space-y-4 mb-6">
               {parsedQuestions.map((q, index) => (
                 <div key={index} className="bg-white/10 rounded-2xl p-4 border border-white/10">
-                  {q.imageUrl ? (
+                  {q.imageUrl && (
                     <img
                       src={q.imageUrl}
                       alt="Question"
                       className="max-w-xs h-auto rounded-xl border border-white/20 mb-2"
                     />
-                  ) : q.text ? (
+                  )}
+                  {q.text && (!q.imageUrl || q.imageContainsStatement === false) && (
                     <LatexPreviewCard text={q.text} />
-                  ) : null}
+                  )}
                   <div className="space-y-1 mb-2">
                     {q.options.filter(o => o).map((opt, i) => (
                       <p key={i} className={`${currentTheme.textSecondary} text-sm`}>
@@ -1351,17 +1364,18 @@ Difficulty: medium`;
                               </button>
                             )}
                             <div className="flex-1 min-w-0">
-                              {question.imageUrl ? (
+                              {question.imageUrl && (
                                 <img
                                   src={question.imageUrl}
                                   alt="Question"
                                   className="max-w-[200px] sm:max-w-xs h-auto rounded-xl border border-white/20 mb-2 sm:mb-3"
                                 />
-                              ) : question.text ? (
+                              )}
+                              {question.text && (!question.imageUrl || question.imageContainsStatement === false) && (
                                 <p className={`${currentTheme.text} font-medium text-sm sm:text-base mb-2 sm:mb-3 line-clamp-3`}>
                                   {question.text}
                                 </p>
-                              ) : null}
+                              )}
                               <div className="flex flex-wrap gap-2">
                                 <span className="px-2.5 py-1 sm:px-3 sm:py-1.5 bg-white/10 text-white/70 rounded-xl text-xs sm:text-sm font-medium">
                                   {question.topic || 'Unknown'}

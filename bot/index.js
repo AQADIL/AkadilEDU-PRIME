@@ -296,7 +296,8 @@ async function showMistake(ctx, publicationId, index) {
   if (index + 1 < mistakes.length) keyboard.text(t(language, 'next'), `review:${publicationId}:${index + 1}`).row();
   keyboard.text(t(language, 'similar'), `similar:${publicationId}`);
   if (question.imageUrl) await ctx.replyWithPhoto(question.imageUrl);
-  const review = t(language, 'reviewQuestion', question.imageUrl ? '' : question.text,
+  const statement = question.imageUrl && question.imageContainsStatement !== false ? '' : question.text;
+  const review = t(language, 'reviewQuestion', statement,
     answer ? question.options[answer.selectedOption] : t(language, 'notAnswered'),
     question.options[question.correctOption], question.explanation);
   const chunks = splitMessage(review);

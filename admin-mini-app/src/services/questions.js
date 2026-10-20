@@ -16,6 +16,7 @@ export function questionContent(question = {}) {
     explanation: question.explanation || '',
     hint: question.hint || '',
     imageUrl: question.imageUrl || '',
+    imageContainsStatement: question.imageContainsStatement ?? true,
   };
 }
 
@@ -52,6 +53,7 @@ export function validateQuestion(questionData) {
           explanation: content.explanation,
           hint: content.hint,
           imageUrl: content.imageUrl,
+          imageContainsStatement: content.imageContainsStatement,
           translations: undefined,
         }));
       } catch (error) {
@@ -63,8 +65,15 @@ export function validateQuestion(questionData) {
 
   const text = typeof questionData.text === 'string' ? questionData.text.trim() : '';
   const imageUrl = typeof questionData.imageUrl === 'string' ? questionData.imageUrl.trim() : '';
+  if (questionData.imageContainsStatement !== undefined && typeof questionData.imageContainsStatement !== 'boolean') {
+    throw new Error('Image statement setting must be true or false.');
+  }
+  const imageContainsStatement = questionData.imageContainsStatement !== false;
   if (!text && !imageUrl) {
     throw new Error('Enter question text or add an image.');
+  }
+  if (!imageContainsStatement && !text) {
+    throw new Error('Enter question text when the image contains only a diagram.');
   }
   if (text.length > 3500) {
     throw new Error('Question text is too long for Telegram.');
@@ -113,6 +122,7 @@ export function validateQuestion(questionData) {
   return {
     text,
     imageUrl,
+    imageContainsStatement,
     options: questionData.options.map(option => option.trim()),
     correctOption: questionData.correctOption,
     topic: questionData.topic,
