@@ -476,6 +476,25 @@ function renderQuestion() {
       section.append(element('h3', '', t('validation')), issues);
       content.append(section);
     }
+    if (question.repair) {
+      const section = element('section', 'answer-section');
+      section.lang = 'ru';
+      section.append(element('h3', '', t('repair')),
+        element('p', '', t(`repair_${question.repair.status}`)),
+        element('p', '', t('repairAttempt', { count: question.repair.attempts })));
+      if (question.repair.history?.length) {
+        const history = element('details');
+        history.append(element('summary', '', t('repairHistory')));
+        for (const entry of question.repair.history) {
+          history.append(element('h3', '', t(entry.attempt === 0 ? 'repairOriginal' : 'repairRound', { count: entry.attempt })));
+          const issues = element('ul');
+          for (const issue of entry.issues ?? []) issues.append(element('li', '', issue));
+          history.append(issues.childElementCount ? issues : element('p', '', t('repairPassed')));
+        }
+        section.append(history);
+      }
+      content.append(section);
+    }
     renderMath(content);
     return [content];
   });
@@ -524,6 +543,12 @@ function render() {
     item.append(element('strong', 'number', number.format(state.totals[key] ?? 0)), document.createTextNode(t(key)));
     return item;
   }));
+  for (const [key, value] of [['repairQueued', state.repairTotals?.queued], ['repairCompleted', state.repairTotals?.completed]]) {
+    if (!value) continue;
+    const item = element('span');
+    item.append(element('strong', 'number', number.format(value)), document.createTextNode(t(key)));
+    totals.append(item);
+  }
   budgetValue.textContent = money.format(state.budget.limit);
   budgetSpent.replaceChildren(element('span', '', t('spent')), element('span', 'number', money.format(state.budget.spent)));
   budgetReserved.replaceChildren(element('span', '', t('reserved')), element('span', 'number', money.format(state.budget.reserved)));
@@ -537,7 +562,7 @@ function render() {
     forecast.replaceChildren(element('p', 'forecast-note', t('forecastTarget', { count: number.format(state.forecast.target) })), cost, estimate,
       element('p', 'forecast-note', t('forecastNote', { count: number.format(state.forecast.sampleAccepted) })));
   } else {
-    forecast.replaceChildren(element('p', 'forecast-note', t('forecastPending')));
+    forecast.replaceChildren(element('p', 'forecast-note', t(state.forecast?.unavailableReason === 'accounting' ? 'forecastAccounting' : 'forecastPending')));
   }
   const limit = state.budget.limit || 1;
   const spentPercent = Math.min(100, Math.max(0, state.budget.spent / limit * 100));
