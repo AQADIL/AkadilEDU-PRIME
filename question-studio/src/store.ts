@@ -43,11 +43,13 @@ export const state: StudioState = await readFile(stateFile, 'utf8').then(value =
     call.model ??= previousModel;
     if (!call.prices) {
       if (call.model === config.model) call.prices = { ...config.prices };
+      else if (call.model === config.reviewModel) call.prices = { ...config.reviewPrices };
       else if (call.model === config.legacyPricing?.model) call.prices = { ...config.legacyPricing.prices };
       else throw new Error(`Missing price snapshot for ${call.model}; migrate with its original configuration or set OPENAI_LEGACY_MODEL and legacy prices`);
     }
     if (call.prices.cacheWrite === undefined) {
       if (call.model === config.model) call.prices.cacheWrite = config.prices.cacheWrite;
+      else if (call.model === config.reviewModel) call.prices.cacheWrite = config.reviewPrices.cacheWrite;
       else if (call.model === config.legacyPricing?.model) call.prices.cacheWrite = config.legacyPricing.prices.cacheWrite;
       else throw new Error(`Missing cache-write price snapshot for ${call.model}; configure its legacy cache-write price`);
     }

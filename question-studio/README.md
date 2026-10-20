@@ -10,6 +10,8 @@ Run `npm run check`, then `npm start`. Open the exact `STUDIO_PUBLIC_ORIGIN` con
 
 `OPENAI_MODEL`, API endpoint, token prices, reasoning effort and maximum output tokens are explicit settings. Verify model access and current prices before starting. `STUDIO_BUDGET_USD` cannot exceed the authorized $50. This is the studio run's API budget, not an account-wide spending limit and not a Firebase billing limit.
 
+`OPENAI_MODEL` handles question creation, translations and geometry research. `OPENAI_REVIEW_MODEL` handles the separate solution and quality review, with its own four `OPENAI_REVIEW_*_PRICE_PER_MILLION` settings. Reservations and actual charges use the selected role's prices. Both roles share the same total budget. Previously completed requests retain their original models, prices and results when either role changes.
+
 Requests use the standard service tier. Each request records its model and prices, so switching models preserves historical costs. Switch only after outstanding calls have settled. For runs created before price snapshots existed, supply `OPENAI_LEGACY_MODEL` and the four `OPENAI_LEGACY_*_PRICE_PER_MILLION` values matching the original run. Existing completed questions keep their actual authoring model; reviewer identity is recorded separately.
 
 ## Workflow

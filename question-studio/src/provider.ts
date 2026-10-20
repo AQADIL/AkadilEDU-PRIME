@@ -91,12 +91,13 @@ function normalizeGenerationResult(kind: ApiCall['kind'], value: unknown): unkno
 }
 
 export function estimateReservation(instructions: string, input: string, schema: object, kind: ApiCall['kind'] = 'generation'): number {
+  const prices = kind === 'review' ? config.reviewPrices : config.prices;
   const inputBound = Buffer.byteLength(instructions + input + JSON.stringify(schema), 'utf8') + 4096;
   if (inputBound > 200000) throw new Error('Input is too large for the configured pricing tier');
   const reservedInput = kind === 'research' ? Math.max(inputBound, config.webSearchInputTokenReserve) : inputBound;
   const toolFee = kind === 'research' ? config.webSearchMaxCalls * config.webSearchPricePerCall : 0;
-  const maximumInputPrice = Math.max(config.prices.input, config.prices.cachedInput, config.prices.cacheWrite);
-  return (reservedInput * maximumInputPrice + config.maxOutputTokens * config.outputPrice) / 1000000 + toolFee;
+  const maximumInputPrice = Math.max(prices.input, prices.cachedInput, prices.cacheWrite);
+  return (reservedInput * maximumInputPrice + config.maxOutputTokens * prices.output) / 1000000 + toolFee;
 }
 
 async function request(endpoint: string, body?: object) {
@@ -142,8 +143,9 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       throw new BudgetError('Оставшегося бюджета недостаточно для безопасного резерва следующего запроса.');
     }
     call = {
-      id: randomUUID(), kind, model: config.model, serviceTier: config.serviceTier,
-      prices: { ...config.prices, ...(kind === 'research' ? { webSearch: config.webSearchPricePerCall } : {}) },
+      id: randomUUID(), kind, model: kind === 'review' ? config.reviewModel : config.model, serviceTier: config.serviceTier,
+      prices: { ...(kind === 'review' ? config.reviewPrices : config.prices),
+        ...(kind === 'research' ? { webSearch: config.webSearchPricePerCall } : {}) },
       ...(kind === 'research' ? { webSearchMaxCalls: config.webSearchMaxCalls } : {}),
       status: 'reserved', reserved, cost: 0,
     };
