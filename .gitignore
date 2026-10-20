@@ -20,3 +20,7 @@ functions/bot/
 *.log
 *.tsbuildinfo
 .DS_Store
+
+.env.*
+!.env.example
+question-studio/.data/
