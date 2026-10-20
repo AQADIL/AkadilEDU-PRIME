@@ -35,7 +35,44 @@ function initialState(): StudioState {
 export const state: StudioState = await readFile(stateFile, 'utf8').then(value => {
   const saved = JSON.parse(value) as StudioState;
   if (saved.version !== 1 || !Array.isArray(saved.calls) || !Array.isArray(saved.questions)) throw new Error('Invalid studio state');
-  if (saved.model !== config.model) throw new Error('Model differs from persisted run; use a separate data directory');
+  const previousModel = saved.model;
+  if (previousModel !== config.model && saved.calls.some(call => call.status !== 'settled')) {
+    throw new Error('Finish or reconcile outstanding API calls before changing the model');
+  }
+  for (const call of saved.calls) {
+    call.model ??= previousModel;
+    if (!call.prices) {
+      if (call.model === config.model) call.prices = { ...config.prices };
+      else if (call.model === config.legacyPricing?.model) call.prices = { ...config.legacyPricing.prices };
+      else throw new Error(`Missing price snapshot for ${call.model}; migrate with its original configuration or set OPENAI_LEGACY_MODEL and legacy prices`);
+    }
+    if (call.prices.cacheWrite === undefined) {
+      if (call.model === config.model) call.prices.cacheWrite = config.prices.cacheWrite;
+      else if (call.model === config.legacyPricing?.model) call.prices.cacheWrite = config.legacyPricing.prices.cacheWrite;
+      else throw new Error(`Missing cache-write price snapshot for ${call.model}; configure its legacy cache-write price`);
+    }
+    if (!call.model || !Number.isFinite(call.prices.input) || call.prices.input <= 0
+      || !Number.isFinite(call.prices.cachedInput) || call.prices.cachedInput < 0
+      || !Number.isFinite(call.prices.cacheWrite) || call.prices.cacheWrite <= 0
+      || !Number.isFinite(call.prices.output) || call.prices.output <= 0
+      || !Number.isFinite(call.cost) || call.cost < 0
+      || !Number.isFinite(call.reserved) || call.reserved < 0) {
+      throw new Error('Invalid persisted API accounting data');
+    }
+    if (call.kind === 'research' && (!Number.isFinite(call.prices.webSearch) || call.prices.webSearch! <= 0
+      || !Number.isInteger(call.webSearchMaxCalls) || call.webSearchMaxCalls! < 1)) {
+      throw new Error('Research request is missing its persisted tool pricing or call limit');
+    }
+  }
+  for (const question of saved.questions) {
+    if (!question.generation.reviewModel) {
+      const reviewCall = saved.calls.find(call => call.kind === 'review'
+        && call.responseId === question.generation.reviewResponseId);
+      if (reviewCall) question.generation.reviewModel = reviewCall.model;
+    }
+  }
+  saved.model = config.model;
+  saved.config.reasoningEffort = config.reasoningEffort;
   saved.budget.limit = config.budget;
   if (saved.status === 'running') {
     saved.status = 'paused'; saved.phase = 'Работа прервана. Можно продолжить с сохранённого этапа.';

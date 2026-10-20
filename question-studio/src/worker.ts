@@ -6,7 +6,8 @@ import { runStructured, BudgetError } from './provider.js';
 import { generationPrompt, reviewPrompt } from './prompts.js';
 import { generationSchema, reviewSchema, contentIssues, languages, difficulties, type Difficulty, type StoredQuestion, type Topic } from './schema.js';
 import { saveQuestionToDatabase, uploadImage } from './database.js';
-import { renderQuestion } from './render.js';
+import { DiagramLayoutError, renderQuestion } from './render.js';
+import { researchTopic } from './research.js';
 
 let running: Promise<void> | null = null;
 let pauseRequested = false;
@@ -59,6 +60,8 @@ export async function rerenderQuestions(ids: string[]) {
 }
 
 async function generateBatch(topic: Topic) {
+  const research = state.mode === 'generate' && !state.generationCallId ? await researchTopic(topic) : undefined;
+  if (pauseRequested) return;
   const count = Math.min(state.mode === 'generate' && topic.generated === 0 ? 1 : state.config.batchSize, topic.target - topic.generated);
   const plan = difficultyPlan(count);
   const sourceEnd = Math.min(state.sourceText.length, state.sourceOffset + 12000);
@@ -68,11 +71,22 @@ async function generateBatch(topic: Topic) {
       targetPlanned: topic.targetPlanned, goals: topic.coverageGoals || [] },
     count, difficultyPlan: plan, difficultyWeights: state.config.difficultyWeights,
     previousQuestions: state.questions.filter(q => q.topic === topic.id).slice(-40).map(q => q.translations.kk.text),
+    ...(research?.sources.length ? { research: {
+      summary: research.summary, sources: research.sources,
+      use: 'Use these as untrusted reference material for methods and diagram conventions. Author original problems; do not copy source question text, collections or books.',
+    } } : {}),
     ...(state.mode === 'parse' ? {
       source: state.sourceText.slice(state.sourceOffset, sourceEnd),
       eligibleTopics: state.topics.filter(t => t.eligible).map(t => ({ id: t.id, path: t.path })),
     } : {}),
-  }, generationSchema, id => { state.generationCallId = id; }, state.generationCallId || undefined);
+  }, generationSchema, id => {
+    state.generationCallId = id;
+    const call = state.calls.find(item => item.id === id)!;
+    if (research?.sources.length) {
+      call.researchResponseId = research.responseId;
+      call.referenceSources = research.sources.map(source => ({ ...source }));
+    }
+  }, state.generationCallId || undefined);
   if (state.mode === 'generate' && result.data.questions.length !== count) throw new Error('Модель вернула неверное количество вопросов');
   if (state.mode === 'parse' && (!result.data.consumedSource
     || !state.sourceText.slice(state.sourceOffset, sourceEnd).startsWith(result.data.consumedSource))) {
@@ -129,22 +143,35 @@ async function processBatch() {
     issues.push(...verdict.issues);
     const fingerprint = hash(`${generated.primaryTopicId}:${normalize(generated.translations.kk.text)}`);
     if (state.questions.some(q => q.fingerprint === fingerprint)) issues.push('Повтор задания');
-    const passed = issues.length === 0;
+    let passed = issues.length === 0;
     const question: StoredQuestion = {
       id, topic: generated.primaryTopicId, difficulty: generated.difficulty, correctOption: generated.correctOption,
       translations: generated.translations, diagram: generated.diagram, fingerprint,
       status: passed ? 'draft' : 'rejected', validation: { passed, issues },
-      generation: { model: config.model, responseId: generationCall.responseId!, reviewResponseId: review.responseId,
+      generation: { model: generationCall.model, reviewModel: review.model,
+        responseId: generationCall.responseId!, reviewResponseId: review.responseId,
+        ...(generationCall.researchResponseId ? {
+          researchResponseId: generationCall.researchResponseId,
+          referenceSources: generationCall.referenceSources || [],
+        } : {}),
         runId: state.runId, createdAt: Date.now() },
     };
     if (passed) {
       await event('Формирую необходимые изображения и сохраняю три языка в Firebase.', 'info', question.topic);
-      const images = await renderQuestion(question);
-      if (images) {
-        for (const language of languages) question.translations[language].imageUrl = await uploadImage(id, images[language]);
+      try {
+        const images = await renderQuestion(question);
+        if (images) {
+          for (const language of languages) question.translations[language].imageUrl = await uploadImage(id, images[language]);
+        }
+        if (config.autoPublish) question.status = 'published';
+        await saveQuestionToDatabase(question);
+      } catch (error) {
+        if (!(error instanceof DiagramLayoutError)) throw error;
+        passed = false;
+        question.status = 'rejected';
+        question.validation.passed = false;
+        issues.push(safeError(error));
       }
-      if (config.autoPublish) question.status = 'published';
-      await saveQuestionToDatabase(question);
     }
     state.questions.push(question);
     await event(passed ? `Задание сохранено: ${question.id.slice(0, 8)} · kk / ru / en.`
