@@ -3,10 +3,14 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "tsx src/server.ts",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "cloud:check": "tsc --noEmit -p cloud/tsconfig.json",
+    "cloud:build": "node cloud/build.mjs"
   },
   "dependencies": {
     "dotenv": "^16.4.0",
@@ -18,7 +22,10 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@google/clasp": "^3.4.1",
+    "@types/google-apps-script": "^2.0.13",
     "@types/node": "^22.0.0",
+    "esbuild": "^0.28.2",
     "typescript": "^5.9.0"
   }
 }

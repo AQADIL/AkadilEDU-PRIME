@@ -634,6 +634,7 @@ function validState(value) {
 async function refreshState() {
   const value = await request('/api/state');
   if (!validState(value)) throw new Error(t('invalidResponse'));
+  const previousError = state?.error || state?.cloudError;
   state = value;
   if (!initialized) {
     const savedTopics = Array.isArray(state.selectedTopicIds) && state.selectedTopicIds.length ? new Set(state.selectedTopicIds) : null;
@@ -645,7 +646,7 @@ async function refreshState() {
     sourceField.hidden = mode.value !== 'parse';
     initialized = true;
   }
-  if (failures > 0 && !state.error) notifyError('');
+  if ((failures > 0 || previousError && previousError === errorNotice.textContent) && !state.error && !state.cloudError) notifyError('');
   online = true;
   connection.classList.remove('offline');
   connection.textContent = t('connected');
@@ -663,13 +664,17 @@ async function action(path, body = {}) {
       if (typeof session.csrfToken !== 'string' || !session.csrfToken) throw new Error(t('unauthorized'));
       csrfToken = session.csrfToken;
     }
-    await request(path, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-Studio-Token': csrfToken } : {}) },
-      body: JSON.stringify(body),
-    });
+    const requests = cloudTransport && ['/api/publish', '/api/rerender'].includes(path) && Array.isArray(body.ids)
+      ? [...new Set(body.ids)].map(id => ({ ...body, ids: [id] })) : [body];
+    for (const payload of requests) {
+      await request(path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-Studio-Token': csrfToken } : {}) },
+        body: JSON.stringify(payload),
+      });
+    }
     await refreshState();
-    if (state.error) notifyError(state.error);
+    if (state.error || state.cloudError) notifyError(state.error || state.cloudError);
   } catch (error) {
     notifyError(error instanceof Error ? error.message : t('requestFailed'));
   } finally {
@@ -726,7 +731,7 @@ async function poll() {
   try {
     await refreshState();
     failures = 0;
-    if (state.error) notifyError(state.error);
+    if (state.error || state.cloudError) notifyError(state.error || state.cloudError);
   } catch (error) {
     if (stopped) return;
     failures += 1;

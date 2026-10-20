@@ -24,3 +24,6 @@ functions/bot/
 .env.*
 !.env.example
 question-studio/.data/
+question-studio/.cloud-build/
+**/.clasp.json
+**/.clasprc.json
