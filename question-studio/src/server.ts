@@ -34,15 +34,18 @@ async function bodyOf(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as unknown;
 }
 function publicState() {
+  const acceptedForModel = state.questions.filter(q => q.validation.passed && q.generation.model === config.model).length;
+  const currentModelSpend = state.calls.filter(call => call.model === config.model).reduce((sum, call) => sum + call.cost, 0);
+  const costPerAccepted = acceptedForModel ? currentModelSpend / acceptedForModel : null;
+  const remainingTarget = state.topics.filter(t => t.eligible).reduce((sum, t) => sum + Math.max(0, t.target - t.generated), 0);
   return {
     ...state, calls: undefined, sourceText: undefined, pendingBatch: undefined, generationCallId: undefined,
     autoPublish: config.autoPublish,
     pricing: { input: config.inputPrice, cachedInput: config.cachedInputPrice, output: config.outputPrice },
     forecast: {
       target: state.topics.filter(t => t.eligible).reduce((sum, t) => sum + t.target, 0),
-      costPerAccepted: state.totals.generated ? state.budget.spent / state.totals.generated : null,
-      estimatedTotal: state.totals.generated ? state.budget.spent / state.totals.generated
-        * state.topics.filter(t => t.eligible).reduce((sum, t) => sum + t.target, 0) : null,
+      costPerAccepted,
+      estimatedTotal: costPerAccepted === null ? null : state.budget.spent + costPerAccepted * remainingTarget,
     },
   };
 }

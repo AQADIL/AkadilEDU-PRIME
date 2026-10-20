@@ -376,6 +376,23 @@ function renderMath(target) {
   });
 }
 
+function referenceSources(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  return value.flatMap(source => {
+    if (!source || typeof source.url !== 'string') return [];
+    let url;
+    try {
+      url = new URL(source.url);
+    } catch {
+      return [];
+    }
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || seen.has(url.href)) return [];
+    seen.add(url.href);
+    return [{ url: url.href, title: typeof source.title === 'string' && source.title.trim() ? source.title.trim() : url.hostname }];
+  });
+}
+
 function renderQuestion() {
   for (const language of languageButtons) language.button.setAttribute('aria-pressed', String(language.code === questionLanguage));
   const questions = visibleQuestions();
@@ -428,6 +445,24 @@ function renderQuestion() {
         content.append(section);
       }
     } else content.append(element('p', 'empty', t('missingTranslation')));
+    const sources = referenceSources(question.generation?.referenceSources);
+    if (sources.length) {
+      const section = element('section', 'answer-section question-sources');
+      section.lang = 'ru';
+      const list = element('ul');
+      for (const source of sources) {
+        const item = element('li');
+        const link = element('a', 'source-link', source.title);
+        link.href = source.url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.append(element('span', 'sr-only', ` (${t('opensNewTab')})`));
+        item.append(link);
+        list.append(item);
+      }
+      section.append(element('h3', '', t('sources')), list);
+      content.append(section);
+    }
     if (question.validation?.issues?.length) {
       const section = element('section', 'answer-section');
       const issues = element('ul');

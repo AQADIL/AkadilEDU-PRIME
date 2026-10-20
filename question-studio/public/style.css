@@ -152,6 +152,9 @@
   .answer-section h3 { font-size: 12px; font-weight: 500; margin-bottom: 9px; }
   .answer-section p, .answer-section li { font-size: 12px; line-height: 1.8; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
   .answer-section ul { padding-left: 18px; margin: 0; }
+  .question-sources li + li { margin-top: 6px; }
+  .source-link { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 3px; }
+  .source-link:hover { color: var(--text); }
   .katex-display { overflow-x: auto; overflow-y: hidden; padding: 4px 0; }
   .pagination { font-size: 11px; color: var(--muted); }
   .pagination-buttons { display: flex; gap: 6px; }

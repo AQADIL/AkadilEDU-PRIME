@@ -10,6 +10,8 @@ Run `npm run check`, then `npm start`. Open the exact `STUDIO_PUBLIC_ORIGIN` con
 
 `OPENAI_MODEL`, API endpoint, token prices, reasoning effort and maximum output tokens are explicit settings. Verify model access and current prices before starting. `STUDIO_BUDGET_USD` cannot exceed the authorized $50. This is the studio run's API budget, not an account-wide spending limit and not a Firebase billing limit.
 
+Requests use the standard service tier. Each request records its model and prices, so switching models preserves historical costs. Switch only after outstanding calls have settled. For runs created before price snapshots existed, supply `OPENAI_LEGACY_MODEL` and the four `OPENAI_LEGACY_*_PRICE_PER_MILLION` values matching the original run. Existing completed questions keep their actual authoring model; reviewer identity is recorded separately.
+
 ## Workflow
 
 The topic list comes from live `/topics`. Only exact boolean `isLast === true` nodes are eligible; the service node `RANDOM` is excluded. Geometry and mathematical literacy are included. Cycles and missing parents stop loading instead of creating a misleading topic path.
@@ -20,6 +22,14 @@ Each question has equivalent Kazakh, Russian and English statements, choices, ex
 
 Question statements use ordinary Unicode math when practical. Necessary LaTeX is limited to the statement and rendered locally. Options, explanations, hints and labels must be plain Unicode. Visual questions include structured diagram geometry. Diagram PNGs omit the statement; identical drawings share one uploaded image across languages. Translated labels produce separate images only when their visible content differs. Statements with complex LaTeX remain in the image and carry `imageContainsStatement=true`; diagram-only images carry `false` so the bot also displays the localized statement. Missing flags retain legacy behavior. Captions are accessibility metadata, while essential information belongs in the statement or visible labels. The renderer does not execute model-supplied SVG or HTML.
 
+The diagram conventions were checked against the NTC's [Russian sample, page 3](https://testcenter.kz/wp-content/uploads/2024/12/obr_var_test_16.pdf) and [English sample, pages 2 and 4](https://testcenter.kz/wp-content/uploads/2025/06/MATHEMATICS.pdf): readable vertex labels, angle arcs, right-angle marks, dashed hidden edges and selective region shading. Ellipse arcs support projected circular rims. Measured label placement avoids overlaps and clipping; diagrams that cannot be arranged legibly are rejected. These original practice questions are not official NTC exam items.
+
+## Geometry references
+
+With `STUDIO_WEB_SEARCH_ENABLED=true`, the worker researches each geometry leaf topic once through the API's real web search tool and caches the result. `STUDIO_WEB_SEARCH_MAX_CALLS` limits built-in calls per research response. Research reserves `STUDIO_WEB_SEARCH_INPUT_TOKEN_RESERVE` input tokens plus maximum output and tool fees before dispatch, within the same total budget. Search fees use `OPENAI_WEB_SEARCH_PRICE_PER_CALL`.
+
+Only source URLs returned by the search tool are retained. The question preview links to reference sources, and Firebase provenance records the research response. Sources inform methods, coverage and diagram conventions for original questions; the pipeline does not bulk-copy collections. No-search or empty results are reported honestly and cached. Research failures retain their call ID for recovery instead of issuing an automatic paid replacement.
+
 Validated questions are stored under `/questions`, with `/questionsByTopic` membership. `STUDIO_AUTO_PUBLISH=true` publishes accepted questions; `false` saves drafts for manual publication in the studio. Manual publication requires validated questions and a stopped worker. Bot practice, channel campaigns, review and the admin editor understand the same translations.
 
 ## Source parsing
@@ -29,6 +39,8 @@ Choose source parsing and paste text that you are entitled to process. The model
 ## Costs and recovery
 
 Before each paid request the studio persists a conservative reservation for input and maximum output tokens. Output accounting includes reasoning tokens. A request cannot start if it could exceed the remaining budget. Completed requests use the API's reported token usage and configured prices; uncertain requests retain their reservation.
+
+Ordinary input, cache reads and cache writes are charged separately. `OPENAI_CACHE_WRITE_PRICE_PER_MILLION` is the full write price for the model's default cache duration. The studio does not request extended cache retention; unexpected 12-hour writes or inconsistent usage stop processing with the reservation retained. Historical corrections require retrieving actual response usage and using the original request's price snapshot.
 
 The price forecast is measured from accepted results, includes rejected work and changes as more tasks are processed. It is an estimate, not a promise of quantity. A quality-first model may exhaust $50 before reaching every topic's desired coverage.
 
