@@ -36,7 +36,17 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
     try {
       await page.route('**/*', async route => {
         const url = new URL(route.request().url());
-        if (url.origin === config.origin) await route.continue(); else await route.abort();
+        if (url.origin === config.origin && url.pathname.startsWith('/vendor/katex/')) {
+          const relative = decodeURIComponent(url.pathname.slice('/vendor/katex/'.length));
+          const root = path.join(studioRoot, 'node_modules/katex/dist');
+          const filename = path.resolve(root, relative);
+          const withinRoot = path.relative(root, filename);
+          if (!withinRoot || withinRoot.startsWith('..') || path.isAbsolute(withinRoot)) {
+            await route.abort();
+            return;
+          }
+          await route.fulfill({ path: filename });
+        } else await route.abort();
       });
       await page.setContent(`<!doctype html><html lang="${language}"><head><meta charset="utf-8">
         ${containsStatement ? `<link rel="stylesheet" href="${config.origin}/vendor/katex/katex.min.css">` : ''}
@@ -53,7 +63,7 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
           renderer(document.getElementById('statement')!, {
             delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }],
             throwOnError: true, trust: false, maxExpand: 1000, strict: 'error',
-            errorCallback: (message: string) => { throw new Error(message); },
+            errorCallback(message: string) { throw new Error(message); },
           });
         });
       }
