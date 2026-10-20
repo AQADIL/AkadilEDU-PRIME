@@ -1,6 +1,8 @@
 import { questionLanguages, t } from './i18n.js';
 
 const root = document.getElementById('app');
+const cloudTransport = Boolean(globalThis.google?.script?.run);
+const pollInterval = cloudTransport ? 30000 : 2000;
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 3 });
 const number = new Intl.NumberFormat('ru-RU');
 const time = new Intl.DateTimeFormat('ru-RU', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -427,8 +429,8 @@ function renderQuestion() {
     const translation = question.translations?.[questionLanguage];
     if (translation) {
       content.append(element('p', 'question-text', translation.text));
-      const imageUrl = translation.localImageUrl ?? translation.imageUrl;
-      if (typeof imageUrl === 'string' && /^\/media\/[^?#]+$/.test(imageUrl) && !imageUrl.includes('..')) {
+      const imageUrl = cloudTransport ? translation.imageUrl : translation.localImageUrl ?? translation.imageUrl;
+      if (safeImageUrl(imageUrl)) {
         const image = element('img', 'question-image');
         image.src = imageUrl;
         image.alt = question.diagram?.caption?.[questionLanguage] ?? translation.imageAlt ?? t('question');
@@ -577,12 +579,37 @@ function render() {
   renderQuestion();
 }
 
+function safeImageUrl(value) {
+  if (typeof value !== 'string') return false;
+  if (!cloudTransport && /^\/media\/[^?#]+$/.test(value) && !value.includes('..')) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password
+      && Array.isArray(state?.mediaOrigins) && state.mediaOrigins.includes(url.origin);
+  } catch {
+    return false;
+  }
+}
+
 function notifyError(message) {
   errorNotice.textContent = message;
   errorNotice.hidden = !message;
 }
 
 async function request(path, options = {}) {
+  if (cloudTransport) {
+    const body = options.body === undefined ? null : JSON.parse(options.body);
+    return new Promise((resolve, reject) => {
+      globalThis.google.script.run
+        .withSuccessHandler(value => {
+          if (!value || typeof value !== 'object') { reject(new Error(t('invalidResponse'))); return; }
+          if (value.error) { reject(new Error(value.error)); return; }
+          resolve(value);
+        })
+        .withFailureHandler(error => reject(new Error(error?.message || t('requestFailed'))))
+        .studioRequest(path, body);
+    });
+  }
   const controller = new AbortController();
   controllers.add(controller);
   const timeout = setTimeout(() => controller.abort(), 20000);
@@ -631,14 +658,14 @@ async function action(path, body = {}) {
   notifyError('');
   renderControls();
   try {
-    if (!csrfToken) {
+    if (!cloudTransport && !csrfToken) {
       const session = await request('/api/session');
       if (typeof session.csrfToken !== 'string' || !session.csrfToken) throw new Error(t('unauthorized'));
       csrfToken = session.csrfToken;
     }
     await request(path, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Studio-Token': csrfToken },
+      headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-Studio-Token': csrfToken } : {}) },
       body: JSON.stringify(body),
     });
     await refreshState();
@@ -705,12 +732,12 @@ async function poll() {
     failures += 1;
     online = false;
     connection.classList.add('offline');
-    const seconds = Math.min(30, 2 ** failures);
+    const seconds = cloudTransport ? pollInterval / 1000 : Math.min(30, 2 ** failures);
     connection.textContent = t('reconnect', { seconds });
     notifyError(error instanceof Error ? error.message : t('requestFailed'));
     renderControls();
   } finally {
-    if (!stopped) pollTimer = setTimeout(() => void poll(), failures ? Math.min(30000, 1000 * 2 ** failures) : 2000);
+    if (!stopped) pollTimer = setTimeout(() => void poll(), failures && !cloudTransport ? Math.min(30000, 1000 * 2 ** failures) : pollInterval);
   }
 }
 
