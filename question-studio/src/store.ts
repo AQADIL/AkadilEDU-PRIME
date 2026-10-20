@@ -1,6 +1,7 @@
 import { mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { setTimeout as delay } from 'node:timers/promises';
 import { config } from './config.js';
 import type { StudioState } from './schema.js';
 
@@ -103,8 +104,22 @@ export function save(): Promise<void> {
   const data = JSON.stringify(state);
   const operation = writes.then(async () => {
     const temporary = `${stateFile}.${randomUUID()}.tmp`;
-    await writeFile(temporary, data, { mode: 0o600 });
-    await rename(temporary, stateFile);
+    try {
+      await writeFile(temporary, data, { mode: 0o600 });
+      const deadline = Date.now() + config.stateWriteTimeoutMs;
+      while (true) {
+        try {
+          await rename(temporary, stateFile);
+          break;
+        } catch (error) {
+          const code = error instanceof Error && 'code' in error ? error.code : null;
+          if (!['EPERM', 'EACCES', 'EBUSY'].includes(String(code)) || Date.now() >= deadline) throw error;
+          await delay(Math.max(1, Math.min(100, deadline - Date.now())));
+        }
+      }
+    } finally {
+      await unlink(temporary).catch(() => undefined);
+    }
   });
   writes = operation.catch(() => undefined);
   return operation;

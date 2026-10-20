@@ -40,6 +40,8 @@ Choose source parsing and paste text that you are entitled to process. The model
 
 ## Costs and recovery
 
+`STUDIO_STATE_WRITE_TIMEOUT_MS` bounds retries when another process temporarily locks the state file. Each retry preserves atomic replacement; a persistent storage failure stops the worker before it can dispatch an unrecorded paid request.
+
 `STUDIO_RECOVERY_BACKOFF_MS` controls the recovery delay after prolonged temporary response-retrieval failures. The worker honors a longer provider `Retry-After`, preserves the existing response ID and reservation, and resumes retrieving the same request when connectivity returns. Pausing interrupts this recovery wait. Authentication failures and inconsistent accounting remain explicit stops.
 
 `STUDIO_API_MAX_ATTEMPTS` bounds automatic replacement requests after known recoverable API failures. A response that ends at `max_output_tokens` may be retried with a larger output allowance, capped by `STUDIO_RETRY_MAX_OUTPUT_TOKENS`. Each attempt retains its own response ID, usage, price snapshot and retry links. Both the failed attempt and its replacement count toward the same budget. Unknown request outcomes and unreconciled usage still stop processing to avoid duplicate charges.
