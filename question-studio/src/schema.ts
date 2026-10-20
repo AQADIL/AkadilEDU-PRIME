@@ -55,7 +55,11 @@ export const reviewSchema = z.strictObject({
   })).min(1).max(5),
 });
 
-export type Translation = z.infer<typeof translationSchema> & { imageUrl?: string; localImageUrl?: string };
+export type Translation = z.infer<typeof translationSchema> & {
+  imageUrl?: string;
+  localImageUrl?: string;
+  imageContainsStatement?: boolean;
+};
 export interface StoredQuestion {
   id: string;
   topic: string;

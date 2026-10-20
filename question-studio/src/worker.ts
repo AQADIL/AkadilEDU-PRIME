@@ -50,7 +50,7 @@ export async function rerenderQuestions(ids: string[]) {
     if (!question) throw new Error('Задание не прошло проверку');
     const images = await renderQuestion(question);
     if (images) {
-      for (const language of languages) question.translations[language].imageUrl = await uploadImage(id, language, images[language]);
+      for (const language of languages) question.translations[language].imageUrl = await uploadImage(id, images[language]);
       await saveQuestionToDatabase(question);
       await save();
     }
@@ -141,7 +141,7 @@ async function processBatch() {
       await event('Формирую необходимые изображения и сохраняю три языка в Firebase.', 'info', question.topic);
       const images = await renderQuestion(question);
       if (images) {
-        for (const language of languages) question.translations[language].imageUrl = await uploadImage(id, language, images[language]);
+        for (const language of languages) question.translations[language].imageUrl = await uploadImage(id, images[language]);
       }
       if (config.autoPublish) question.status = 'published';
       await saveQuestionToDatabase(question);

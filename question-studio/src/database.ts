@@ -65,9 +65,9 @@ export async function saveQuestionToDatabase(question: StoredQuestion) {
   await db.ref(`questionsByTopic/${question.topic}/${question.id}`).set(true);
 }
 
-export async function uploadImage(questionId: string, language: string, filename: string): Promise<string> {
+export async function uploadImage(questionId: string, filename: string): Promise<string> {
   const digest = createHash('sha256').update(await readFile(filename)).digest('hex').slice(0, 16);
-  const destination = `questions/${questionId}/${language}-${digest}.png`;
+  const destination = `questions/${questionId}/${digest}.png`;
   const bucket = getStorage(app).bucket();
   const existing = bucket.file(destination);
   if ((await existing.exists())[0]) return getDownloadURL(existing);

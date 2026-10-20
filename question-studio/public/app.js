@@ -408,7 +408,7 @@ function renderQuestion() {
       if (typeof imageUrl === 'string' && /^\/media\/[^?#]+$/.test(imageUrl) && !imageUrl.includes('..')) {
         const image = element('img', 'question-image');
         image.src = imageUrl;
-        image.alt = translation.imageAlt ?? t('question');
+        image.alt = question.diagram?.caption?.[questionLanguage] ?? translation.imageAlt ?? t('question');
         image.loading = 'lazy';
         content.append(image);
       }

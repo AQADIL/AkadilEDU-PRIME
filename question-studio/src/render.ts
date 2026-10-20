@@ -53,24 +53,34 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
   const directory = path.join(config.dataDir, 'media');
   await mkdir(directory, { recursive: true });
   const result = {} as Record<Language, string>;
+  const rendered = new Map<string, string>();
   for (const language of languages) {
+    const translation = question.translations[language];
+    const text = translation.text;
+    const containsStatement = /\$|\\[A-Za-z]+/.test(text);
+    const drawing = question.diagram ? diagramSvg(question.diagram, language) : '';
+    const signature = JSON.stringify([containsStatement ? text : '', drawing]);
+    const existing = rendered.get(signature);
+    translation.imageContainsStatement = containsStatement;
+    if (existing) {
+      result[language] = existing;
+      translation.localImageUrl = `/media/${path.basename(existing)}`;
+      continue;
+    }
     const page = await browser.newPage({ viewport: { width: 840, height: 1000 }, deviceScaleFactor: 1.5 });
     try {
       await page.route('**/*', async route => {
         const url = new URL(route.request().url());
         if (url.origin === config.origin) await route.continue(); else await route.abort();
       });
-      const text = question.translations[language].text;
-      const drawing = question.diagram ? diagramSvg(question.diagram, language) : '';
-      const caption = question.diagram?.caption[language] || '';
       await page.setContent(`<!doctype html><html lang="${language}"><head><meta charset="utf-8">
         <link rel="stylesheet" href="${config.origin}/vendor/katex/katex.min.css">
         <style>body{margin:0;background:white;color:#182840;font:22px/1.65 Arial,sans-serif}
         article{box-sizing:border-box;width:840px;padding:36px}p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
-        svg{display:block;width:100%;margin-top:24px}.caption{font-size:17px;margin-top:8px;color:#42506a}
-        .katex{font-size:1.1em}</style></head><body><article><p id="statement">${escape(text)}</p>
-        ${drawing}${caption ? `<p class="caption">${escape(caption)}</p>` : ''}</article></body></html>`, { waitUntil: 'networkidle' });
-      if (/\$/.test(text)) {
+        svg{display:block;width:100%}#statement+svg{margin-top:24px}
+        .katex{font-size:1.1em}</style></head><body><article>${containsStatement ? `<p id="statement">${escape(text)}</p>` : ''}
+        ${drawing}</article></body></html>`, { waitUntil: 'networkidle' });
+      if (containsStatement && /\$/.test(text)) {
         await page.addScriptTag({ path: path.join(studioRoot, 'node_modules/katex/dist/katex.min.js') });
         await page.addScriptTag({ path: path.join(studioRoot, 'node_modules/katex/dist/contrib/auto-render.min.js') });
         await page.evaluate(() => {
@@ -89,7 +99,8 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
       const pixels = await page.locator('article').screenshot();
       await sharp(pixels).png({ compressionLevel: 9, palette: true, colours: 64 }).toFile(filename);
       result[language] = filename;
-      question.translations[language].localImageUrl = `/media/${question.id}-${language}.png`;
+      rendered.set(signature, filename);
+      translation.localImageUrl = `/media/${path.basename(filename)}`;
     } finally { await page.close(); }
   }
   return result;

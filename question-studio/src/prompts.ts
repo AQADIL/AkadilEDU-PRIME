@@ -15,6 +15,11 @@ diagram coordinates are exact Cartesian positions with positive y upwards. Point
 Segments and polygon vertices reference those IDs. Circles reference a point for their center.
 Use circles, segments (dashed for hidden edges), filled polygons and labels to make accurate labelled
 2D figures, projected 3D figures, plots or charts. Captions and labels must be multilingual.
+Keep diagrams separate from the question statement. Prefer shared language-neutral labels such as
+A, B, C, x, angle symbols and numeric values where mathematically sufficient. Translate necessary words.
+Do not put the question statement into diagram labels. Captions are accessibility metadata, not visible
+image text: all essential diagram information, including not-to-scale warnings, must appear in labels
+or the question statement.
 Render data faithfully: lengths, angles, intersections, plotted coordinates and scale MUST agree with
 the statement. Label any not-to-scale projected figure. Include all data needed to solve the question
 in the statement or visible labels. Do not reveal the answer on the diagram. No fabricated measurements.
