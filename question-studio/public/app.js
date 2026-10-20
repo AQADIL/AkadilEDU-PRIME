@@ -418,6 +418,12 @@ function renderQuestion() {
     content.append(meta);
     const topic = state.topics.find(item => item.id === question.topic);
     content.append(element('p', 'question-topic', topic ? displayTopicName(topic) : question.topic));
+    const provenance = element('p', 'model-line', t('modelPair', {
+      generation: question.generation?.model || t('unavailable'),
+      review: question.generation?.reviewModel || t('unavailable'),
+    }));
+    provenance.lang = 'ru';
+    content.append(provenance);
     const translation = question.translations?.[questionLanguage];
     if (translation) {
       content.append(element('p', 'question-text', translation.text));
@@ -509,7 +515,10 @@ function render() {
   }
   status.dataset.status = state.status;
   statusText.textContent = t(state.status);
-  modelLine.textContent = `${t('model')}: ${state.model || t('unavailable')}${state.phase ? ` · ${state.phase}` : ''}`;
+  modelLine.textContent = `${t('modelPair', {
+    generation: state.model || t('unavailable'),
+    review: state.reviewModel || t('unavailable'),
+  })}${state.phase ? ` · ${state.phase}` : ''}`;
   totals.replaceChildren(...['eligible', 'generated', 'published', 'rejected'].map(key => {
     const item = element('span');
     item.append(element('strong', 'number', number.format(state.totals[key] ?? 0)), document.createTextNode(t(key)));
@@ -519,13 +528,16 @@ function render() {
   budgetSpent.replaceChildren(element('span', '', t('spent')), element('span', 'number', money.format(state.budget.spent)));
   budgetReserved.replaceChildren(element('span', '', t('reserved')), element('span', 'number', money.format(state.budget.reserved)));
   const hasForecast = Number.isFinite(state.forecast?.costPerAccepted) && Number.isFinite(state.forecast?.estimatedTotal);
-  forecast.hidden = !hasForecast;
+  forecast.hidden = false;
   if (hasForecast) {
     const cost = element('div', 'budget-line');
     cost.append(element('span', '', t('costPerAccepted')), element('span', 'number', money.format(state.forecast.costPerAccepted)));
     const estimate = element('div', 'budget-line');
     estimate.append(element('span', '', t('estimatedTotal')), element('span', 'number', money.format(state.forecast.estimatedTotal)));
-    forecast.replaceChildren(element('p', 'forecast-note', t('forecastTarget', { count: number.format(state.forecast.target) })), cost, estimate, element('p', 'forecast-note', t('forecastNote')));
+    forecast.replaceChildren(element('p', 'forecast-note', t('forecastTarget', { count: number.format(state.forecast.target) })), cost, estimate,
+      element('p', 'forecast-note', t('forecastNote', { count: number.format(state.forecast.sampleAccepted) })));
+  } else {
+    forecast.replaceChildren(element('p', 'forecast-note', t('forecastPending')));
   }
   const limit = state.budget.limit || 1;
   const spentPercent = Math.min(100, Math.max(0, state.budget.spent / limit * 100));

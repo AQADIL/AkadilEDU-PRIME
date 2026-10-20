@@ -34,17 +34,40 @@ async function bodyOf(request: IncomingMessage): Promise<unknown> {
   return JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as unknown;
 }
 function publicState() {
-  const acceptedForModel = state.questions.filter(q => q.validation.passed && q.generation.model === config.model).length;
-  const currentModelSpend = state.calls.filter(call => call.model === config.model).reduce((sum, call) => sum + call.cost, 0);
-  const costPerAccepted = acceptedForModel ? currentModelSpend / acceptedForModel : null;
+  const callsByResponse = new Map(state.calls.filter(call => call.responseId).map(call => [call.responseId!, call]));
+  const completedGenerations = state.calls.filter(call => call.kind === 'generation' && call.model === config.model
+    && call.status === 'settled' && call.responseId && call.id !== state.pendingBatch?.generationCallId);
+  const sampledCalls = new Map<string, number>();
+  let acceptedInSample = 0;
+  let sampledBatches = 0;
+  for (const generation of completedGenerations) {
+    const questions = state.questions.filter(question => question.generation.responseId === generation.responseId);
+    if (!questions.length || questions.some(question => question.generation.reviewModel !== config.reviewModel)) continue;
+    const reviews = [...new Set(questions.map(question => question.generation.reviewResponseId))]
+      .map(responseId => callsByResponse.get(responseId));
+    if (reviews.some(call => !call || call.kind !== 'review' || call.model !== config.reviewModel || call.status !== 'settled')) continue;
+    const research = generation.researchResponseId ? callsByResponse.get(generation.researchResponseId) : undefined;
+    if (generation.researchResponseId && (!research || research.kind !== 'research' || research.status !== 'settled')) continue;
+    sampledCalls.set(generation.id, generation.cost);
+    for (const review of reviews) sampledCalls.set(review!.id, review!.cost);
+    if (research) sampledCalls.set(research.id, research.cost);
+    acceptedInSample += questions.filter(question => question.validation.passed).length;
+    sampledBatches += 1;
+  }
+  const sampleCost = [...sampledCalls.values()].reduce((sum, cost) => sum + cost, 0);
+  const costPerAccepted = acceptedInSample ? sampleCost / acceptedInSample : null;
   const remainingTarget = state.topics.filter(t => t.eligible).reduce((sum, t) => sum + Math.max(0, t.target - t.generated), 0);
   return {
     ...state, calls: undefined, sourceText: undefined, pendingBatch: undefined, generationCallId: undefined,
+    model: config.model,
+    reviewModel: config.reviewModel,
     autoPublish: config.autoPublish,
-    pricing: { input: config.inputPrice, cachedInput: config.cachedInputPrice, output: config.outputPrice },
+    pricing: { generation: config.prices, review: config.reviewPrices },
     forecast: {
       target: state.topics.filter(t => t.eligible).reduce((sum, t) => sum + t.target, 0),
       costPerAccepted,
+      sampleAccepted: acceptedInSample,
+      sampleBatches: sampledBatches,
       estimatedTotal: costPerAccepted === null ? null : state.budget.spent + costPerAccepted * remainingTarget,
     },
   };
@@ -146,7 +169,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
 }
 
 await loadTopics();
-await event(`Подключено тем: ${state.totals.eligible}. Модель: ${state.model}. Бюджет: $${state.budget.limit}.`);
+await event(`Подключено тем: ${state.totals.eligible}. Создание: ${config.model}. Проверка: ${config.reviewModel}. Бюджет: $${state.budget.limit}.`);
 const server = createServer((request, response) => {
   handle(request, response).catch(error => {
     if (!response.headersSent) json(response, 400, { error: safeError(error) });
