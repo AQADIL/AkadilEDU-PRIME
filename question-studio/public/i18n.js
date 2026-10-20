@@ -1,0 +1,60 @@
+const messages = {
+  ru: {
+    title: 'Question Studio', brand: 'AkadilEDU', topics: 'Темы', search: 'Найти тему',
+    allTopics: 'Все доступные', clearTopics: 'Снять выбор', selectedTopics: 'Выбрано: {count}',
+    noTopics: 'Темы появятся после подключения к базе.', noMatches: 'Нет совпадений',
+    workspace: 'Создание заданий', review: 'Просмотр заданий', activity: 'Ход работы',
+    connection: 'Подключение к студии…', connected: 'Подключено', reconnect: 'Связь прервана. Повтор через {seconds} с.',
+    idle: 'Готово к запуску', running: 'В работе', paused: 'На паузе', error: 'Нужна проверка',
+    budget_exhausted: 'Бюджет исчерпан', completed: 'Работа завершена', model: 'Модель',
+    generated: 'Создано', published: 'В базе', rejected: 'Отклонено', eligible: 'Доступных тем',
+    budget: 'Бюджет', spent: 'Потрачено', reserved: 'Зарезервировано', limit: 'Лимит',
+    run: 'Начать генерацию', pause: 'Приостановить', resume: 'Продолжить',
+    mode: 'Источник заданий', generate: 'Создать по темам', parse: 'Из своего текста',
+    perTopic: 'Начальная оценка на тему', batchSize: 'Размер партии', sourceText: 'Исходный текст',
+    sourcePlaceholder: 'Вставьте задания, варианты ответов и решения для разбора…',
+    readFile: 'Открыть .txt', fileError: 'Выберите текстовый файл UTF-8 размером до 2 МБ.',
+    formError: 'Укажите целое положительное число заданий и размер партии.',
+    sourceError: 'Добавьте исходный текст с заданиями.',
+    plan: 'Выбрано тем: {topics}. План: {questions} заданий на трёх языках.',
+    estimatePlan: 'Выбрано тем: {topics}. Оценка: {questions} заданий. Модель уточнит объём каждой темы.',
+    difficultyMix: 'Лёгкие {easy}% · средние {medium}% · сложные {hard}%',
+    estimated: 'Оценка', planned: 'План',
+    budgetNote: 'Объём зависит от стоимости запросов. Достигнув лимита, студия остановит новые запросы.',
+    startHint: 'Выберите темы и запустите работу',
+    activityHint: 'Здесь появятся запросы, результаты проверок и ошибки.',
+    questionHint: 'Здесь появятся задания с переводами и результатом проверки.',
+    autoPublish: 'Проверенные задания сохраняются в базу автоматически.',
+    costPerAccepted: 'За принятое задание',
+    estimatedTotal: 'Оценка всего плана',
+    forecastTarget: 'План: {count} заданий',
+    forecastNote: 'По фактической стоимости готовых заданий; итог может измениться.',
+    live: 'Обновляется автоматически', follow: 'Следить за новыми событиями',
+    publish: 'Добавить в базу', publishCount: 'Добавить в базу ({count})',
+    selectValid: 'Выбрать проверенные', selectQuestion: 'Выбрать задание',
+    questionLanguage: 'Язык задания', filterQuestions: 'Показать задания',
+    all: 'Все', validated: 'Проверены', draft: 'Черновик', failed: 'Не прошли проверку',
+    valid: 'Проверено', invalid: 'Есть замечания', missingTranslation: 'Перевод отсутствует',
+    explanation: 'Решение', hint: 'Подсказка', correct: 'Верный ответ',
+    difficulty: 'Сложность', validation: 'Замечания проверки', question: 'Задание',
+    previous: 'Предыдущее задание', next: 'Следующее задание', position: '{current} из {total}',
+    working: 'Выполняется…', actionDone: 'Действие выполнено', requestFailed: 'Не удалось выполнить запрос',
+    invalidResponse: 'Сервер вернул некорректный ответ. Проверьте журнал сервера.',
+    unauthorized: 'Сессия студии недействительна. Перезагрузите страницу.',
+    refresh: 'Повторить', eventCount: 'Событий: {count}', noFilteredQuestions: 'В этой категории пока нет заданий.',
+    topicDisabled: 'Тема недоступна для генерации', topicProgress: '{generated} / {target}',
+    unavailable: 'Не задано', mobileTopics: 'Показать темы', closeTopics: 'Скрыть темы',
+    easy: 'Лёгкое', medium: 'Среднее', hard: 'Сложное',
+  },
+};
+
+export function t(key, values = {}, locale = 'ru') {
+  const value = messages[locale]?.[key] ?? messages.ru[key] ?? key;
+  return value.replace(/\{(\w+)\}/g, (_, token) => String(values[token] ?? ''));
+}
+
+export const questionLanguages = [
+  { code: 'kk', label: 'Қазақша' },
+  { code: 'ru', label: 'Русский' },
+  { code: 'en', label: 'English' },
+];
