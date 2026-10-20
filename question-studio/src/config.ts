@@ -17,6 +17,10 @@ const env = z.object({
   STUDIO_PER_TOPIC: z.coerce.number().int().min(10).max(200),
   STUDIO_BATCH_SIZE: z.coerce.number().int().min(1).max(5),
   STUDIO_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(2000).max(32000),
+  STUDIO_API_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5),
+  STUDIO_RETRY_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(2000).max(64000),
+  STUDIO_REPAIR_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(3),
+  STUDIO_MAX_TOPIC_FAILURES: z.coerce.number().int().min(1).max(10),
   STUDIO_REASONING_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh']),
   STUDIO_AUTO_PUBLISH: z.enum(['true', 'false']),
   STUDIO_WEB_SEARCH_ENABLED: z.enum(['true', 'false']),
@@ -52,6 +56,9 @@ if (origin.hostname !== env.STUDIO_HOST || Number(origin.port) !== env.STUDIO_PO
   throw new Error('STUDIO_PUBLIC_ORIGIN must match the configured local host and port');
 }
 if (new URL(env.OPENAI_BASE_URL).protocol !== 'https:') throw new Error('OPENAI_BASE_URL must use HTTPS');
+if (env.STUDIO_RETRY_MAX_OUTPUT_TOKENS < env.STUDIO_MAX_OUTPUT_TOKENS) {
+  throw new Error('STUDIO_RETRY_MAX_OUTPUT_TOKENS must be at least STUDIO_MAX_OUTPUT_TOKENS');
+}
 const legacyPricing = {
   model: env.OPENAI_LEGACY_MODEL,
   input: env.OPENAI_LEGACY_INPUT_PRICE_PER_MILLION,
@@ -73,6 +80,10 @@ export const config = {
   perTopic: env.STUDIO_PER_TOPIC,
   batchSize: env.STUDIO_BATCH_SIZE,
   maxOutputTokens: env.STUDIO_MAX_OUTPUT_TOKENS,
+  apiMaxAttempts: env.STUDIO_API_MAX_ATTEMPTS,
+  retryMaxOutputTokens: env.STUDIO_RETRY_MAX_OUTPUT_TOKENS,
+  repairMaxAttempts: env.STUDIO_REPAIR_MAX_ATTEMPTS,
+  maxTopicFailures: env.STUDIO_MAX_TOPIC_FAILURES,
   reasoningEffort: env.STUDIO_REASONING_EFFORT,
   autoPublish: env.STUDIO_AUTO_PUBLISH === 'true',
   webSearchEnabled: env.STUDIO_WEB_SEARCH_ENABLED === 'true',

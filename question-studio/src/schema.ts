@@ -95,6 +95,14 @@ export interface StoredQuestion {
   status: 'draft' | 'published' | 'rejected';
   validation: { passed: boolean; issues: string[] };
   fingerprint: string;
+  repair?: {
+    attempts: number;
+    status: 'pending' | 'running' | 'completed' | 'exhausted';
+    generationCallId?: string;
+    reviewCallId?: string;
+    candidate?: GeneratedQuestion;
+    history: { attempt: number; issues: string[]; generationResponseId?: string; reviewResponseId?: string }[];
+  };
   generation: {
     model: string;
     reviewModel?: string;
@@ -116,9 +124,11 @@ export interface Topic {
   target: number;
   targetPlanned: boolean;
   failedBatches?: number;
+  requestFailures?: number;
   rationale?: string;
   coverageGoals?: string[];
   researchCallId?: string;
+  researchUnavailable?: boolean;
   research?: TopicResearch;
 }
 export interface ModelPrices {
@@ -134,7 +144,13 @@ export interface ApiCall {
   model: string;
   serviceTier?: 'default';
   prices: ModelPrices;
-  kind: 'generation' | 'review' | 'research';
+  kind: 'generation' | 'review' | 'research' | 'repair';
+  attempt?: number;
+  retryOf?: string;
+  retryCallId?: string;
+  maxOutputTokens?: number;
+  terminalReason?: string;
+  terminalRetryable?: boolean;
   status: 'reserved' | 'pending' | 'settled' | 'uncertain';
   reserved: number;
   cost: number;
@@ -232,6 +248,8 @@ export function contentIssues(question: GeneratedQuestion): string[] {
   const issues: string[] = [];
   for (const language of languages) {
     const t = question.translations[language];
+    const outsideMath = t.text.replace(/\$\$[\s\S]*?\$\$|\$[^$]*?\$/g, '');
+    if (latex.test(outsideMath)) issues.push(`${language}: формулы LaTeX в условии должны быть внутри $...$ или $$...$$`);
     if (new Set(t.options.map(v => v.normalize('NFKC').trim().toLowerCase())).size !== 4) {
       issues.push(`${language}: повторяющиеся варианты ответа`);
     }
