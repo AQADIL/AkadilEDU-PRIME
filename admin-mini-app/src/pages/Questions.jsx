@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Filter, Trash2, Save, Upload, Check, X, Copy, SquarePen, ChevronDown, ChevronRight, ChevronLeft, Folder, FolderOpen, FileText, ArrowLeft, Image as ImageIcon, Loader2, CheckSquare, Square, ListChecks } from 'lucide-react';
@@ -10,6 +10,30 @@ import LatexPreviewCard from '../components/LatexPreviewCard';
 
 function questionImageUrls(question) {
   return new Set([question?.imageUrl, ...Object.values(question?.translations || {}).map(content => content.imageUrl)].filter(Boolean));
+}
+
+function buildTopicTreeWithCounts(topics, questions) {
+  const directCounts = new Map();
+  const childrenByParent = new Map();
+  for (const question of questions) {
+    directCounts.set(question.topic, (directCounts.get(question.topic) ?? 0) + 1);
+  }
+  for (const topic of topics) {
+    const parentId = topic.parentId || '';
+    const children = childrenByParent.get(parentId) ?? [];
+    children.push(topic);
+    childrenByParent.set(parentId, children);
+  }
+  const buildBranch = (parentId) => (childrenByParent.get(parentId) ?? [])
+    .sort((a, b) => Number(Boolean(a.hidden)) - Number(Boolean(b.hidden))
+      || (a.name || a.id).localeCompare(b.name || b.id))
+    .map(topic => {
+      const children = buildBranch(topic.id);
+      const directCount = directCounts.get(topic.id) ?? 0;
+      return { ...topic, children, directCount,
+        totalCount: directCount + children.reduce((sum, child) => sum + child.totalCount, 0) };
+    });
+  return buildBranch('');
 }
 
 export default function Questions() {
@@ -106,32 +130,10 @@ export default function Questions() {
     (!selectedTopicFilter || q.topic === selectedTopicFilter)
   );
 
-  const countQuestionsByTopic = (topicId) => {
-    return questions.filter(q => q.topic === topicId).length;
-  };
-
-  const buildTopicTreeWithCounts = (parentId = '') => {
-    const filteredTopics = topics
-      .filter(topic => topic.parentId === parentId)
-      .sort((a, b) => {
-        if (a.hidden !== b.hidden) {
-          return a.hidden ? 1 : -1;
-        }
-        return (a.name || a.id).localeCompare(b.name || b.id);
-      })
-      .map(topic => {
-        const directCount = countQuestionsByTopic(topic.id);
-        const children = buildTopicTreeWithCounts(topic.id);
-        const childrenCount = children.reduce((sum, child) => sum + child.totalCount, 0);
-        return {
-          ...topic,
-          children,
-          directCount,
-          totalCount: directCount + childrenCount
-        };
-      });
-    return filteredTopics;
-  };
+  const topicTree = useMemo(() => buildTopicTreeWithCounts(topics, questions), [topics, questions]);
+  const currentMobileTopics = useMemo(() => mobileTopicPath.reduce((branch, parent) => (
+    branch.find(topic => topic.id === parent.id)?.children ?? []
+  ), topicTree), [mobileTopicPath, topicTree]);
 
   const toggleTopicNode = (topicId) => {
     const newExpanded = new Set(expandedTopicNodes);
@@ -170,23 +172,6 @@ export default function Questions() {
         setMobileTopicPath(newPath);
       }
     }
-  };
-
-  const getCurrentMobileTopics = () => {
-    let currentTopics;
-    if (mobileTopicPath.length === 0) {
-      currentTopics = topics.filter(t => !t.parentId);
-    } else {
-      const currentParent = mobileTopicPath[mobileTopicPath.length - 1];
-      currentTopics = topics.filter(t => t.parentId === currentParent.id);
-    }
-
-    return currentTopics.sort((a, b) => {
-      if (a.hidden !== b.hidden) {
-        return a.hidden ? 1 : -1;
-      }
-      return (a.name || a.id).localeCompare(b.name || b.id);
-    });
   };
 
   const renderTopicTreeNode = (topic, level = 0) => {
@@ -255,8 +240,6 @@ export default function Questions() {
       </div>
     );
   };
-
-  const topicTree = buildTopicTreeWithCounts();
 
   const deleteManagedImage = async (imageUrl) => {
     if (!imageUrl) return;
@@ -1252,7 +1235,7 @@ Difficulty: medium`;
                   )}
 
                   <div className="space-y-2 max-h-[50vh] overflow-y-auto overflow-x-hidden">
-                    {getCurrentMobileTopics().map(topic => {
+                    {currentMobileTopics.map(topic => {
                       const isLast = topic.isLast === true;
 
                       return (
@@ -1275,7 +1258,7 @@ Difficulty: medium`;
                               <span className={`${currentTheme.text} font-medium text-sm line-clamp-2 break-words leading-tight`}>{topic.name || topic.id}</span>
                             </div>
                             <div className="flex items-center gap-2 shrink-0 whitespace-nowrap text-right">
-                              <span className={`text-sm font-semibold ${currentTheme.textSecondary}`}>{topic.questionCount || 0}</span>
+                              <span className={`text-sm font-semibold tabular-nums ${currentTheme.textSecondary}`}>{topic.totalCount}</span>
                               {!isLast && (
                                 <ChevronRight className="w-4 h-4 text-white/50 shrink-0" />
                               )}
@@ -1286,7 +1269,7 @@ Difficulty: medium`;
                     })}
                   </div>
 
-                  {getCurrentMobileTopics().length === 0 && (
+                  {currentMobileTopics.length === 0 && (
                     <div className={`text-center py-4 ${currentTheme.textSecondary} text-sm`}>
                       No topics
                     </div>
