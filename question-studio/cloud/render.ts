@@ -1,6 +1,9 @@
 import { config } from './config.js';
 import { CloudYieldError } from './provider.js';
 import { diagramSchema, languages, type Diagram, type Language, type StoredQuestion } from '../src/schema.js';
+import { statementPresentation } from '../src/statementPresentation.js';
+import { layoutStatement, MathLayoutError } from './math-layout.js';
+import { combineQuestionPng, cropQuestionPng } from './png.js';
 
 export class QuestionRenderError extends Error {}
 export class DiagramLayoutError extends QuestionRenderError {}
@@ -213,14 +216,50 @@ function slidesRequest(path: string, body?: unknown): GoogleAppsScript.URL_Fetch
   return response;
 }
 
-function renderDiagramQuestion(question: StoredQuestion): Record<Language, string> | null {
-  for (const language of languages) {
-    question.translations[language].imageContainsStatement = false;
-    delete question.translations[language].localImageUrl;
-    if (!question.diagram) delete question.translations[language].imageUrl;
+function formulaRequests(text: string, pageId: string, width: number, height: number): Request[] {
+  const layout = layoutStatement(text, width - 48);
+  if (layout.height > height - 48) throw new QuestionRenderError('Условие слишком высокое для читаемого изображения; сократите текст внутри формулы, сохранив все данные');
+  const requests: Request[] = [];
+  for (const primitive of layout.primitives) {
+    const id = `math_${Utilities.getUuid().replace(/-/g, '').slice(0, 18)}`;
+    const x = primitive.x + 24, y = primitive.y + 24;
+    if (primitive.kind === 'text') {
+      requests.push({ createShape: { objectId: id, shapeType: 'TEXT_BOX', elementProperties: { pageObjectId: pageId,
+        size: { width: { magnitude: primitive.width, unit: 'PT' }, height: { magnitude: primitive.height, unit: 'PT' } },
+        transform: { scaleX: 1, scaleY: 1, shearX: 0, shearY: 0, translateX: x, translateY: y, unit: 'PT' } } } },
+      { insertText: { objectId: id, text: primitive.text } },
+      { updateTextStyle: { objectId: id, textRange: { type: 'ALL' }, style: { fontFamily: 'Times New Roman', fontSize: { magnitude: primitive.fontSize, unit: 'PT' },
+        foregroundColor: { opaqueColor: { rgbColor: ink } } }, fields: 'fontFamily,fontSize,foregroundColor' } },
+      { updateParagraphStyle: { objectId: id, textRange: { type: 'ALL' }, style: { alignment: 'START', lineSpacing: 100,
+        spaceAbove: { magnitude: 0, unit: 'PT' }, spaceBelow: { magnitude: 0, unit: 'PT' } }, fields: 'alignment,lineSpacing,spaceAbove,spaceBelow' } },
+      { updateShapeProperties: { objectId: id, shapeProperties: { contentAlignment: 'MIDDLE', autofit: { autofitType: 'NONE' },
+        shapeBackgroundFill: { propertyState: 'NOT_RENDERED' }, outline: { propertyState: 'NOT_RENDERED' } },
+        fields: 'contentAlignment,autofit,shapeBackgroundFill,outline' } });
+    } else {
+      const dx = primitive.x2 - primitive.x, dy = primitive.y2 - primitive.y, magnitude = Math.hypot(dx, dy);
+      if (magnitude < 1e-6) continue;
+      requests.push({ createLine: { objectId: id, lineCategory: 'STRAIGHT', elementProperties: { pageObjectId: pageId,
+        size: { width: { magnitude, unit: 'PT' }, height: { magnitude: 0, unit: 'PT' } },
+        transform: { scaleX: dx / magnitude, scaleY: dx / magnitude, shearX: -dy / magnitude, shearY: dy / magnitude,
+          translateX: x, translateY: y, unit: 'PT' } } } },
+      { updateLineProperties: { objectId: id, lineProperties: { lineFill: { solidFill: { color: { rgbColor: ink } } },
+        weight: { magnitude: 1.2, unit: 'PT' } }, fields: 'lineFill,weight' } });
+    }
   }
-  if (!question.diagram) return null;
-  const diagram = diagramSchema.parse(question.diagram);
+  return requests;
+}
+
+function renderImageQuestion(question: StoredQuestion): Record<Language, string> | null {
+  const presentations = Object.fromEntries(languages.map(language => [language, statementPresentation(question.translations[language].text)])) as
+    Record<Language, ReturnType<typeof statementPresentation>>;
+  for (const language of languages) {
+    question.translations[language].imageContainsStatement = presentations[language].containsStatement;
+    question.translations[language].displayText = presentations[language].displayText;
+    delete question.translations[language].localImageUrl;
+    if (!question.diagram && !presentations[language].imageText) delete question.translations[language].imageUrl;
+  }
+  if (!question.diagram && !languages.some(language => presentations[language].imageText)) return null;
+  const diagram = question.diagram ? diagramSchema.parse(question.diagram) : null;
   const properties = PropertiesService.getScriptProperties();
   let presentationId = properties.getProperty('STUDIO_RENDER_PRESENTATION_ID');
   if (!presentationId) {
@@ -232,10 +271,13 @@ function renderDiagramQuestion(question: StoredQuestion): Record<Language, strin
   const result = {} as Record<Language, string>;
   const rendered = new Map<string, string>();
   for (const language of languages) {
-    const signature = JSON.stringify([diagram.points.map(point => point.label[language]), diagram.labels.map(label => label.text[language]),
-      diagram.angles.map(angle => angle.label[language])]);
+    const text = presentations[language].imageText;
+    const signature = JSON.stringify([text, diagram ? [diagram.points.map(point => point.label[language]), diagram.labels.map(label => label.text[language]),
+      diagram.angles.map(angle => angle.label[language])] : null]);
     const previous = rendered.get(signature);
     if (previous) { result[language] = previous; continue; }
+    const parts: number[][] = [];
+    for (const part of [...(text ? ['formula'] : []), ...(diagram ? ['diagram'] : [])]) {
     const presentation = SlidesApp.openById(presentationId);
     const slide = presentation.getSlides()[0] || presentation.appendSlide(SlidesApp.PredefinedLayout.BLANK);
     const pageId = slide.getObjectId();
@@ -244,7 +286,8 @@ function renderDiagramQuestion(question: StoredQuestion): Record<Language, strin
     presentation.saveAndClose();
     const background: Request = { updatePageProperties: { objectId: pageId,
       pageProperties: { pageBackgroundFill: { solidFill: { color: { rgbColor: white } } } }, fields: 'pageBackgroundFill' } };
-    const requests = clear.concat([background], renderer(diagram, language, pageId, width, height));
+    const requests = clear.concat([background], part === 'formula' ? formulaRequests(text, pageId, width, height)
+      : renderer(diagram!, language, pageId, width, height));
     for (let offset = 0; offset < requests.length; offset += 350) {
       slidesRequest(`presentations/${encodeURIComponent(presentationId)}:batchUpdate`, { requests: requests.slice(offset, offset + 350) });
     }
@@ -258,7 +301,9 @@ function renderDiagramQuestion(question: StoredQuestion): Record<Language, strin
     catch { throw new CloudYieldError('Изображение Google Slides временно недоступно'); }
     if ([408, 429].includes(png.getResponseCode()) || png.getResponseCode() >= 500) throw new CloudYieldError('Изображение Google Slides временно недоступно');
     if (png.getResponseCode() !== 200) throw new Error(`Google Slides thumbnail download: HTTP ${png.getResponseCode()}`);
-    const encoded = Utilities.base64Encode(png.getBlob().getBytes());
+    parts.push(cropQuestionPng(png.getBlob().getBytes()));
+    }
+    const encoded = Utilities.base64Encode(combineQuestionPng(parts));
     result[language] = encoded;
     rendered.set(signature, encoded);
   }
@@ -266,8 +311,9 @@ function renderDiagramQuestion(question: StoredQuestion): Record<Language, strin
 }
 
 export function renderQuestion(question: StoredQuestion): Record<Language, string> | null {
-  try { return renderDiagramQuestion(question); }
+  try { return renderImageQuestion(question); }
   catch (error) {
+    if (error instanceof MathLayoutError) throw new QuestionRenderError(error.message);
     if (error instanceof QuestionRenderError || error instanceof CloudYieldError) throw error;
     if (error instanceof Error && /quota|too many times|too much computer time|temporarily|timed?\s*out|unavailable|try again/i.test(error.message)) {
       throw new CloudYieldError('Рендеринг временно отложен: квота или соединение Google Slides');

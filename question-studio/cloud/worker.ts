@@ -52,7 +52,7 @@ export function rerenderQuestions(ids: string[]) {
     const question = state.questions.find(q => q.id === id && q.validation.passed);
     if (!question) throw new Error('Задание не прошло проверку');
     const textIssues = cloudTextIssues({ ...question, primaryTopicId: question.topic });
-    if (textIssues.length) throw new Error('Existing LaTeX questions require local image rendering; cloud rerendering preserves plain Unicode text only');
+    if (textIssues.length) throw new Error(textIssues.join('; '));
     const images = renderQuestion(question);
     if (images) {
       for (const language of languages) question.translations[language].imageUrl = uploadImage(id, images[language]);

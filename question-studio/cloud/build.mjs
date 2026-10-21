@@ -16,7 +16,7 @@ const output = path.join(root, '.cloud-build');
 await mkdir(output, { recursive: true });
 const functions = ['doGet', 'studioRequest', 'bootstrapCloud', 'activateCloud', 'cloudTick', 'cloudStatus', 'handoffToLocal', 'acceptLocalHandoff'];
 await build({ entryPoints: [path.join(root, 'cloud/entry.ts')], outfile: path.join(output, 'Code.js'),
-  bundle: true, format: 'iife', globalName: 'AkadilCloud', platform: 'neutral', target: 'es2020',
+  bundle: true, format: 'iife', globalName: 'AkadilCloud', platform: 'neutral', target: 'es2020', mainFields: ['module', 'main'],
   minify: true, legalComments: 'none',
   footer: { js: functions.map(name => `function ${name}(){return AkadilCloud.${name}.apply(null,arguments);}`).join('\n') },
 });

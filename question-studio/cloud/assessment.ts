@@ -5,10 +5,12 @@ import { state, safeError } from './store.js';
 import { contentIssues, languages, reviewSchema, type GeneratedQuestion, type StoredQuestion } from '../src/schema.js';
 import { renderQuestion, QuestionRenderError } from './render.js';
 import { saveQuestionToDatabase, uploadImage } from './database.js';
+import { layoutStatement, MathLayoutError } from './math-layout.js';
+import { statementPresentation } from '../src/statementPresentation.js';
 
 export type Verdict = z.infer<typeof reviewSchema>['reviews'][number];
 export class BatchContentError extends Error {}
-export const cloudNotation = '\nAll statements, answer options, explanations, hints and diagram labels are displayed as plain text. Use exact readable Unicode mathematical notation and parentheses for fraction grouping. Do not output LaTeX commands or delimiters anywhere. Preserve mathematical meaning and all necessary diagrams.';
+export const cloudNotation = `\nRender statement fractions and complex expressions as delimited LaTeX, with translated instructions outside the formula block and exactly the same formula in all three languages whenever possible. The cloud renderer supports frac/dfrac/tfrac, sqrt (including indexed roots), upper/lower indices, left/right delimiters, overline, binom, plain text/operator names, standard Greek letters and arithmetic/relation/trigonometric/logarithmic symbols, and cases/aligned/gathered/matrix/pmatrix/bmatrix/vmatrix environments. Use these supported constructs; preserve mathematical meaning. Put no LaTeX or image references in options, explanations, hints or diagram labels: these fields must remain readable Unicode. Diagram labels should be language-neutral where possible. Never include the translated instruction inside an image when it can be separated without losing meaning.`;
 export function cloudTextIssues(question: GeneratedQuestion): string[] {
   const issues: string[] = [];
   for (const language of languages) {
@@ -17,10 +19,13 @@ export function cloudTextIssues(question: GeneratedQuestion): string[] {
       ...question.diagram.points.map(point => point.label[language]),
       ...question.diagram.angles.map(angle => angle.label[language]),
       ...question.diagram.labels.map(label => label.text[language])] : [];
-    if ([translation.text, ...translation.options, translation.explanation, translation.hint, ...diagramText]
+    if ([...translation.options, translation.explanation, translation.hint, ...diagramText]
       .some(text => /\\[A-Za-z]+|\\[()[\]]|\$\$?|\^\{|_\{/.test(text))) {
-      issues.push(`${language}: replace LaTeX with mathematically equivalent readable Unicode notation; the cloud output is plain text.`);
+      issues.push(`${language}: options, explanation, hint and diagram labels must use readable Unicode notation without LaTeX; only the statement supports formula images.`);
     }
+    const statement = statementPresentation(translation.text);
+    if (statement.imageText) try { layoutStatement(statement.imageText, 672); }
+    catch (error) { if (error instanceof MathLayoutError) issues.push(`${language}: ${error.message}`); else throw error; }
   }
   return issues;
 }
