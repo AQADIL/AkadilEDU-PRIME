@@ -10,7 +10,7 @@ The cloud worker runs on Google Apps Script time triggers without a laptop or a 
 - Transient API, Firebase and Google service errors defer work. Bounded content failures proceed to repair or the next topic. Authentication, corrupted accounting and uncertain charges fail closed.
 - A prepaid six-minute runtime reservation survives an interrupted invocation. Completed invocations replace it with elapsed time. When the configured daily allowance is exhausted, work resumes in the next 24-hour window.
 - Luna authors and repairs; Sol independently solves and reviews. Models, prices, limits and endpoints come from Script Properties populated from the deployment environment.
-- Geometry is drawn with Slides into PNGs, uploaded to Firebase Storage, and shared across equivalent labels. Statements stay separate and use Unicode mathematics. Unsupported LaTeX in new cloud candidates goes through repair instead of being published as raw commands.
+- Geometry and statement formulas are drawn privately with Slides, cropped to their content with a 24-pixel margin, and uploaded to Firebase Storage. Identical formulas and diagrams share one image across languages; translated instructions remain separate when possible. Answers, hints and explanations always remain Unicode text. Unsupported LaTeX goes through repair instead of being published as raw commands.
 - The web app is deployed with `MYSELF` access and checks the exact configured owner for every operation. No public API or shared bearer link is enabled.
 
 ## Deployment
@@ -29,6 +29,10 @@ Build artifacts, bootstrap material, credentials and local state are ignored by 
 ## Operations
 
 Use the private web UI to pause, resume, inspect costs and review questions. `cloudStatus` returns safe runtime diagnostics for script-level administration. Trigger failures also appear in Apps Script's Executions page. Pausing keeps pending responses and their reservations intact. The timer can remain installed while paused or budget exhausted; it issues no paid requests in those states.
+
+To return an existing run from the laptop, pause and stop the local worker, then stage its complete gzip-compressed state in the private `questionStudioMigrations/<runId>` record with destination `google-apps-script`, export timestamp and SHA-256 checksum. Run `acceptLocalHandoff`, then `activateCloud`. Import requires the same run, a paused checkpoint, a fresh checksum, nondecreasing settled charges and preservation of every existing call and question. It cannot increase the budget or erase an existing ledger. Repeating the same import is idempotent. Set local `STUDIO_EXECUTION_OWNER=google-apps-script` before restarting any local interface.
+
+If the provider exceeds the reserved number of paid searches but its total charge still fits the monetary reservation, the completed response is retained and further web research is disabled for the run. Generation and review continue using cached references. A monetary overrun or uncertain charge remains an explicit stop.
 
 Google documents that multiple signed-in Google accounts can break Apps Script web-app access. If the private web URL shows a Google “file not found” page, open it in a separate browser profile or private window signed in only as the configured owner. This does not affect already installed time triggers.
 

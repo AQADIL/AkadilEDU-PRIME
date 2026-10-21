@@ -85,15 +85,24 @@ export function cloudTick() {
   const properties = PropertiesService.getScriptProperties();
   let runtime: z.infer<typeof runtimeSchema> | undefined;
   let runtimeReserved = false;
+  let stateLoaded = false;
   try {
     runtime = runtimeSchema.parse(JSON.parse(properties.getProperty('STUDIO_RUNTIME_WINDOW') ||
       JSON.stringify({ startedAt, used: 0 })));
     if (startedAt - runtime.startedAt >= 86400000) runtime = { startedAt, used: 0 };
-    if (runtime.used + 360000 > config.dailyRuntimeMs) return;
+    if (runtime.used + 360000 > config.dailyRuntimeMs) {
+      if (properties.getProperty('STUDIO_QUOTA_STATUS_WINDOW') !== String(runtime.startedAt)) {
+        loadState();
+        publishRuntimeStatus();
+        properties.setProperty('STUDIO_QUOTA_STATUS_WINDOW', String(runtime.startedAt));
+      }
+      return;
+    }
     runtime.used += 360000;
     properties.setProperty('STUDIO_RUNTIME_WINDOW', JSON.stringify(runtime));
     runtimeReserved = true;
     loadState();
+    stateLoaded = true;
     if (state.status !== 'running') return;
     properties.setProperty('STUDIO_LAST_TICK', String(startedAt));
     runWorkerStep();
@@ -108,19 +117,30 @@ export function cloudTick() {
       runtime.used = runtime.used - 360000 + (Date.now() - startedAt);
       properties.setProperty('STUDIO_RUNTIME_WINDOW', JSON.stringify(runtime));
     }
-    lock.releaseLock();
+    try {
+      if (stateLoaded) publishRuntimeStatus();
+    } catch (error) {
+      properties.setProperty('STUDIO_DIAGNOSTIC_ERROR', safeError(error));
+    } finally { lock.releaseLock(); }
   }
 }
 
+function publishRuntimeStatus() {
+  const properties = PropertiesService.getScriptProperties();
+  const runtime = runtimeSchema.parse(JSON.parse(properties.getProperty('STUDIO_RUNTIME_WINDOW') ||
+    JSON.stringify({ startedAt: Date.now(), used: 0 })));
+  const status = { status: state.status, phase: state.phase, budget: state.budget, totals: state.totals,
+    capturedAt: Date.now(), tick: properties.getProperty('STUDIO_LAST_TICK'),
+    executionOwner: properties.getProperty('STUDIO_EXECUTION_OWNER'),
+    runtime: { ...runtime, limit: config.dailyRuntimeMs, resetsAt: runtime.startedAt + 86400000 },
+    error: properties.getProperty('STUDIO_TICK_ERROR') || state.error,
+    triggers: ScriptApp.getProjectTriggers().filter(trigger => trigger.getHandlerFunction() === 'cloudTick').length };
+  requestDatabase(`questionStudioRuntime/${state.runId}`, 'put', status);
+  return status;
+}
+
 export function cloudStatus() {
-  return locked(true, () => {
-    const status = { status: state.status, phase: state.phase, budget: state.budget, totals: state.totals,
-      capturedAt: Date.now(), tick: PropertiesService.getScriptProperties().getProperty('STUDIO_LAST_TICK'),
-      error: PropertiesService.getScriptProperties().getProperty('STUDIO_TICK_ERROR') || state.error,
-      triggers: ScriptApp.getProjectTriggers().filter(trigger => trigger.getHandlerFunction() === 'cloudTick').length };
-    requestDatabase(`questionStudioRuntime/${state.runId}`, 'put', status);
-    return status;
-  });
+  return locked(true, publishRuntimeStatus);
 }
 
 export function handoffToLocal() {
