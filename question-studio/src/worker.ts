@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { config } from './config.js';
 import { state, event, save, safeError } from './store.js';
-import { runStructured, BudgetError, RecoverableApiError, RequestPausedError, ResponsePollingError } from './provider.js';
+import { runStructured, BudgetError, RecoverableApiError, RequestPausedError, ResponsePollingError, UnidentifiedApiOutcomeError } from './provider.js';
 import { generationPrompt, reviewPrompt } from './prompts.js';
 import { generationSchema, reviewSchema, languages, difficulties, type Difficulty, type StoredQuestion, type Topic } from './schema.js';
 import { saveQuestionToDatabase, uploadImage } from './database.js';
@@ -180,6 +180,22 @@ async function loop() {
   try {
     while (!pauseRequested) {
       try {
+        let recovered = 0;
+        for (const call of state.calls) {
+          if (call.status !== 'uncertain' || call.responseId) continue;
+          if (!call.quarantined) { call.quarantined = true; recovered++; }
+          if (state.generationCallId === call.id) { state.generationCallId = null; recovered++; }
+          if (state.pendingBatch?.reviewCallId === call.id) { delete state.pendingBatch.reviewCallId; recovered++; }
+          if (call.kind === 'research') {
+            const topic = state.topics.find(item => item.researchCallId === call.id);
+            if (topic && !topic.researchUnavailable) { topic.researchUnavailable = true; recovered++; }
+          }
+          for (const question of state.questions) {
+            if (question.repair?.generationCallId === call.id) { delete question.repair.generationCallId; recovered++; }
+            if (question.repair?.reviewCallId === call.id) { delete question.repair.reviewCallId; recovered++; }
+          }
+        }
+        if (recovered) await event('Сохранены неопределённые расходы; этап продолжится без повторной отправки этих запросов.', 'warning');
         if (state.pendingBatch) {
           await processBatch();
           continue;
@@ -215,6 +231,12 @@ async function loop() {
         await generateBatch(topic);
       } catch (error) {
         if (error instanceof RequestPausedError) break;
+        if (error instanceof UnidentifiedApiOutcomeError) {
+          await event('Связь оборвалась до получения ID ответа. Весь резерв сохранён; продолжаю этап новым запросом после паузы.', 'warning');
+          const until = Date.now() + config.recoveryBackoffMs;
+          while (!pauseRequested && Date.now() < until) await delay(Math.min(1000, until - Date.now()));
+          continue;
+        }
         if (error instanceof ResponsePollingError) {
           await event('Связь с OpenAI временно недоступна. Ожидаю восстановления; оплаченный запрос сохранён и повторно не отправляется.', 'warning');
           const until = Date.now() + error.retryAfterMs;

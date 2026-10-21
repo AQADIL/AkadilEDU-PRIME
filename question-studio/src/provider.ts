@@ -33,6 +33,11 @@ const responseSchema = z.object({
 
 export class BudgetError extends Error {}
 export class RequestPausedError extends Error {}
+export class UnidentifiedApiOutcomeError extends Error {
+  constructor(readonly callId: string) {
+    super('Результат запроса неизвестен. Полный резерв сохранён; этот запрос не повторяется.');
+  }
+}
 export class ResponsePollingError extends Error {
   constructor(readonly retryAfterMs: number) {
     super('OpenAI временно недоступен. Сохранённый ответ будет получен после восстановления связи без нового платного запроса.');
@@ -212,6 +217,7 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       delete call.result;
       await terminalFailure(call, 'invalid_structured_result', true);
     }
+    if (call?.status === 'uncertain' && call.quarantined) throw new UnidentifiedApiOutcomeError(call.id);
     if (call?.status === 'uncertain' || (call && !call.responseId)) {
       throw new Error('Неопределённый результат API-запроса. Резерв сохранён; повторная оплата автоматически запрещена.');
     }
@@ -282,10 +288,11 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
         call.status = 'pending';
         await save();
       } catch (error) {
-        call.status = 'uncertain';
-        if (kind === 'research' && !call.responseId) call.quarantined = true;
+        call.status = call.responseId ? 'pending' : 'uncertain';
+        if (!call.responseId) call.quarantined = true;
         await save();
-        throw error;
+        if (!call.responseId) throw new UnidentifiedApiOutcomeError(call.id);
+        throw new ResponsePollingError(config.recoveryBackoffMs);
       }
     }
     let pollFailures = 0;
