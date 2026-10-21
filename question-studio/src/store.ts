@@ -66,6 +66,9 @@ export const state: StudioState = await readFile(stateFile, 'utf8').then(value =
       || !Number.isInteger(call.webSearchMaxCalls) || call.webSearchMaxCalls! < 1)) {
       throw new Error('Research request is missing its persisted tool pricing or call limit');
     }
+    if (call.quarantined && (call.kind !== 'research' || call.status !== 'uncertain' || call.responseId)) {
+      throw new Error('Invalid quarantined API request');
+    }
   }
   for (const question of saved.questions) {
     if (!question.generation.reviewModel) {

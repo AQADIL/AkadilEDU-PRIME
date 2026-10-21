@@ -31,6 +31,14 @@ export async function researchTopic(topic: Topic, shouldPause?: () => boolean): 
   if (!topic.eligible || !topic.id.startsWith('geometry_')) return undefined;
   if (topic.research) return topic.research;
   if (topic.researchUnavailable) return undefined;
+  const uncertainCall = state.calls.find(call => call.id === topic.researchCallId
+    && call.kind === 'research' && call.status === 'uncertain' && !call.responseId);
+  if (uncertainCall) {
+    uncertainCall.quarantined = true;
+    topic.researchUnavailable = true;
+    await event('Результат поиска источников неизвестен. Сохраняю весь резерв и продолжаю без повторного запроса.', 'warning', topic.id);
+    return undefined;
+  }
   if ((!config.webSearchEnabled || state.calls.some(exceededWebSearchLimit)) && !topic.researchCallId) return undefined;
   await event(`${topic.name}: проверяю источники и требования к чертежам.`, 'info', topic.id);
   const result = await runStructured('research', researchPrompt, {

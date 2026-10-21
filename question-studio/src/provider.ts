@@ -119,10 +119,11 @@ export function estimateReservation(instructions: string, input: string, schema:
   return (reservedInput * maximumInputPrice + maxOutputTokens * prices.output) / 1000000 + toolFee;
 }
 
-async function request(endpoint: string, body?: object) {
+async function request(endpoint: string, body?: object, clientRequestId?: string) {
   const response = await fetch(`${config.apiBase}${endpoint}`, {
     method: body ? 'POST' : 'GET',
-    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json',
+      ...(clientRequestId ? { 'X-Client-Request-Id': clientRequestId } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(60000),
   });
@@ -221,7 +222,7 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       throw new RecoverableApiError(previous.id, previous.terminalReason!);
     }
     if (!call || previous) {
-      if (state.calls.some(item => item.status === 'uncertain' || item.status === 'reserved')) {
+      if (state.calls.some(item => (item.status === 'uncertain' && !item.quarantined) || item.status === 'reserved')) {
         throw new Error('Uncertain API accounting must be reconciled before any new paid request');
       }
       if (previous && ['server_error', 'rate_limit_exceeded', 'vector_store_timeout'].includes(previous.terminalReason!)) {
@@ -276,12 +277,13 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
             max_tool_calls: call.webSearchMaxCalls,
             include: ['web_search_call.action.sources'],
           } : {}),
-        });
+        }, call.id);
         call.responseId = created.id;
         call.status = 'pending';
         await save();
       } catch (error) {
         call.status = 'uncertain';
+        if (kind === 'research' && !call.responseId) call.quarantined = true;
         await save();
         throw error;
       }

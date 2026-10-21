@@ -153,6 +153,7 @@ export interface ApiCall {
   terminalReason?: string;
   terminalRetryable?: boolean;
   status: 'reserved' | 'pending' | 'settled' | 'uncertain';
+  quarantined?: boolean;
   reserved: number;
   cost: number;
   inputTokens?: number;
