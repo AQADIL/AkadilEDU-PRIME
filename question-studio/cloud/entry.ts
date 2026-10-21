@@ -79,7 +79,6 @@ const runtimeSchema = z.object({ startedAt: z.number().nonnegative(), used: z.nu
 export function cloudTick() {
   const startedAt = Date.now();
   initializeConfig(); owner(false);
-  if (localOwnsRun()) return;
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
   const properties = PropertiesService.getScriptProperties();
@@ -87,6 +86,22 @@ export function cloudTick() {
   let runtimeReserved = false;
   let stateLoaded = false;
   try {
+    const controlPath = `questionStudioControl/${ScriptApp.getScriptId()}`;
+    const command = requestDatabase(controlPath);
+    if (command) {
+      const control = z.strictObject({ id: z.uuid(), action: z.literal('handoff-local'),
+        requestedAt: z.number().int().positive(), status: z.enum(['pending', 'completed']),
+        completedAt: z.number().int().positive().optional() }).parse(command);
+      if (control.status === 'pending' && control.requestedAt <= Date.now() + 60000
+        && Date.now() - control.requestedAt < 3600000) {
+        loadState();
+        transferToLocal();
+        requestDatabase(controlPath, 'put', { ...control, status: 'completed', completedAt: Date.now() });
+        publishRuntimeStatus();
+        return;
+      }
+    }
+    if (localOwnsRun()) return;
     runtime = runtimeSchema.parse(JSON.parse(properties.getProperty('STUDIO_RUNTIME_WINDOW') ||
       JSON.stringify({ startedAt, used: 0 })));
     if (startedAt - runtime.startedAt >= 86400000) runtime = { startedAt, used: 0 };
@@ -154,21 +169,23 @@ export function configureCloudRuntime() {
 }
 
 export function handoffToLocal() {
-  return locked(true, () => {
-    state.status = 'paused';
-    event('Генерация передана локальной студии. Облачный таймер остановлен.');
-    save();
-    PropertiesService.getScriptProperties().setProperty('STUDIO_EXECUTION_OWNER', 'local');
-    for (const trigger of ScriptApp.getProjectTriggers()) {
-      if (trigger.getHandlerFunction() === 'cloudTick') ScriptApp.deleteTrigger(trigger);
-    }
-    const serialized = JSON.stringify(state);
-    const payload = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(serialized, 'application/json')).getBytes());
-    requestDatabase(`questionStudioMigrations/${state.runId}`, 'put', {
-      runId: state.runId, destination: 'local', exportedAt: Date.now(), checksum: sha256(serialized), payload,
-    });
-    return { runId: state.runId, budget: state.budget, totals: state.totals, status: state.status };
+  return locked(true, transferToLocal);
+}
+
+function transferToLocal() {
+  state.status = 'paused';
+  event('Генерация передана локальной студии. Облачный таймер остановлен.');
+  save();
+  const serialized = JSON.stringify(state);
+  const payload = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(serialized, 'application/json')).getBytes());
+  requestDatabase(`questionStudioMigrations/${state.runId}`, 'put', {
+    runId: state.runId, destination: 'local', exportedAt: Date.now(), checksum: sha256(serialized), payload,
   });
+  PropertiesService.getScriptProperties().setProperty('STUDIO_EXECUTION_OWNER', 'local');
+  for (const trigger of ScriptApp.getProjectTriggers()) {
+    if (trigger.getHandlerFunction() === 'cloudTick') ScriptApp.deleteTrigger(trigger);
+  }
+  return { runId: state.runId, budget: state.budget, totals: state.totals, status: state.status };
 }
 
 export function acceptLocalHandoff() {
