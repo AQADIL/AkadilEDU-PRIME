@@ -275,7 +275,8 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       try {
         const created = await request('/responses', {
           model: call.model, service_tier: call.serviceTier, instructions, input: inputText,
-          reasoning: { effort: config.reasoningEffort },
+          reasoning: { effort: kind === 'review' ? config.reviewReasoningEffort
+            : kind === 'research' ? config.researchReasoningEffort : config.generationReasoningEffort },
           text: { format: { type: 'json_schema', name: kind, strict: true, schema: jsonSchema } },
           max_output_tokens: maxOutputTokens, background: true, store: true,
           ...(kind === 'research' ? {

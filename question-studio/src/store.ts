@@ -79,6 +79,7 @@ export const state: StudioState = await readFile(stateFile, 'utf8').then(value =
   }
   saved.model = config.model;
   saved.config.reasoningEffort = config.reasoningEffort;
+  saved.config.batchSize = config.batchSize;
   saved.budget.limit = config.budget;
   if (saved.status === 'running') {
     saved.status = 'paused'; saved.phase = 'Работа прервана. Можно продолжить с сохранённого этапа.';
