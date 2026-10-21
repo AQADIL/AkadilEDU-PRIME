@@ -2,6 +2,9 @@ import { z } from 'zod';
 
 const httpsUrl = z.string().regex(/^https:\/\/[A-Za-z0-9.-]+(?::443)?(?:\/[^\s?#]*)?$/);
 const positive = z.coerce.number().positive();
+declare const DEPLOYMENT_CLOUD_DAILY_RUNTIME_MS: string;
+const runtimeLimitSchema = z.coerce.number().int().min(60000).max(5400000);
+export function deploymentRuntimeLimit() { return runtimeLimitSchema.parse(DEPLOYMENT_CLOUD_DAILY_RUNTIME_MS); }
 const envSchema = z.object({
   STUDIO_BUDGET_USD: positive.max(50),
   STUDIO_PER_TOPIC: z.coerce.number().int().min(10).max(200),
@@ -42,7 +45,7 @@ const envSchema = z.object({
   GOOGLE_SLIDES_API_URL: httpsUrl,
   STUDIO_OWNER_EMAIL: z.email(),
   STUDIO_CLOUD_TICK_MINUTES: z.coerce.number().pipe(z.union([z.literal(1), z.literal(5), z.literal(10), z.literal(15), z.literal(30)])),
-  STUDIO_CLOUD_DAILY_RUNTIME_MS: z.coerce.number().int().min(60000).max(4500000),
+  STUDIO_CLOUD_DAILY_RUNTIME_MS: runtimeLimitSchema,
 });
 
 function readConfig() {

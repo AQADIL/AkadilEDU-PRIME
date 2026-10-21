@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { config, initializeConfig } from './config.js';
+import { config, deploymentRuntimeLimit, initializeConfig } from './config.js';
 import { event, importState, loadState, restoreLocalState, safeError, save, state } from './store.js';
 import { runWorkerStep } from './worker.js';
 import { request } from './api.js';
@@ -141,6 +141,16 @@ function publishRuntimeStatus() {
 
 export function cloudStatus() {
   return locked(true, publishRuntimeStatus);
+}
+
+export function configureCloudRuntime() {
+  return locked(true, () => {
+    const properties = PropertiesService.getScriptProperties();
+    properties.setProperty('STUDIO_CLOUD_DAILY_RUNTIME_MS', String(deploymentRuntimeLimit()));
+    properties.deleteProperty('STUDIO_QUOTA_STATUS_WINDOW');
+    initializeConfig();
+    return publishRuntimeStatus();
+  });
 }
 
 export function handoffToLocal() {
