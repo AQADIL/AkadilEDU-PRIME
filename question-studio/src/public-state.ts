@@ -7,6 +7,7 @@ export interface PublicStateConfig {
   prices: ModelPrices;
   reviewPrices: ModelPrices;
   repairMaxAttempts: number;
+  concurrency?: number;
 }
 
 export function publicState(state: StudioState, config: PublicStateConfig) {
@@ -36,7 +37,8 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
     && call.status === 'settled' && !call.retryCallId)) {
     const chain = lineage(generation);
     if (!chain) { incompleteAccounting = true; continue; }
-    if (chain.some(call => call.id === state.pendingBatch?.generationCallId || call.id === state.generationCallId)) continue;
+    if (chain.some(call => call.id === state.pendingBatch?.generationCallId || call.id === state.generationCallId
+      || state.jobs?.some(job => job.generationCallId === call.id || job.batch?.generationCallId === call.id))) continue;
     const questions = generation.responseId ? state.questions.filter(question => question.generation.responseId === generation.responseId
       || question.repair?.history.some(entry => entry.generationResponseId === generation.responseId)) : [];
     if (questions.some(question => question.repair?.status === 'pending' || question.repair?.status === 'running')) continue;
@@ -85,8 +87,24 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
   const sampleCost = [...sampledCalls.values()].reduce((sum, cost) => sum + cost, 0);
   const costPerAccepted = acceptedInSample && !incompleteAccounting ? sampleCost / acceptedInSample : null;
   const remainingTarget = state.topics.filter(t => t.eligible).reduce((sum, t) => sum + Math.max(0, t.target - t.generated), 0);
+  const repairs = state.questions.filter(question => question.repair?.status === 'running');
+  const activeTopicIds = [...new Set([...(state.jobs ?? []).map(job => job.topicId), ...repairs.map(question => question.topic)])];
   return {
-    ...state, calls: undefined, sourceText: undefined, pendingBatch: undefined, generationCallId: undefined,
+    ...state, calls: undefined, sourceText: undefined, pendingBatch: undefined, generationCallId: undefined, jobs: undefined,
+    activeTopicIds,
+    ...(config.concurrency ? { pipeline: {
+      concurrency: state.mode === 'parse' ? 1 : config.concurrency,
+      activeRequests: state.calls.filter(call => call.status === 'reserved' || call.status === 'pending').length,
+      jobs: [
+        ...(state.jobs ?? []).map(job => ({ id: job.id, topicId: job.topicId,
+          topicName: state.topics.find(topic => topic.id === job.topicId)?.name ?? job.topicId,
+          stage: job.stage, count: job.count, retryAt: job.retryAt })),
+        ...repairs.map(question => ({ id: `repair:${question.id}`, topicId: question.topic,
+          topicName: state.topics.find(topic => topic.id === question.topic)?.name ?? question.topic,
+          stage: (question.repair?.retryAt ?? 0) > Date.now() ? 'waiting' : question.repair?.candidate ? 'review' : 'generation',
+          count: 1, retryAt: question.repair?.retryAt })),
+      ],
+    } } : {}),
     model: config.model,
     reviewModel: config.reviewModel,
     autoPublish: config.autoPublish,

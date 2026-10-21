@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { config } from './config.js';
 import type { StudioState } from './schema.js';
+import { generationJobSchema } from './schema.js';
 
 const stateFile = path.join(config.dataDir, 'state.json');
 const lockFile = path.join(config.dataDir, 'studio.lock');
@@ -31,11 +32,22 @@ function initialState(): StudioState {
     topics: [], events: [], questions: [], calls: [], totals: { eligible: 0, generated: 0, published: 0, rejected: 0 },
     activeTopicId: null, mode: 'generate', sourceText: '', sourceOffset: 0, selectedTopicIds: [], pendingBatch: null,
     generationCallId: null,
+    jobs: [],
   };
 }
 export const state: StudioState = await readFile(stateFile, 'utf8').then(value => {
   const saved = JSON.parse(value) as StudioState;
   if (saved.version !== 1 || !Array.isArray(saved.calls) || !Array.isArray(saved.questions)) throw new Error('Invalid studio state');
+  saved.jobs = generationJobSchema.array().parse(saved.jobs ?? []);
+  if (new Set(saved.jobs.map(job => job.id)).size !== saved.jobs.length
+    || new Set(saved.jobs.map(job => job.topicId)).size !== saved.jobs.length) throw new Error('Duplicate generation jobs');
+  for (const job of saved.jobs) {
+    if (!saved.topics.some(topic => topic.id === job.topicId && topic.eligible)) throw new Error('Generation job has an invalid topic');
+    for (const [id, kind] of [[job.generationCallId, 'generation'], [job.batch?.generationCallId, 'generation'],
+      [job.batch?.reviewCallId, 'review']] as const) {
+      if (id && !saved.calls.some(call => call.id === id && call.kind === kind)) throw new Error('Generation job has an invalid request reference');
+    }
+  }
   const previousModel = saved.model;
   if (previousModel !== config.model && saved.calls.some(call => call.status !== 'settled')) {
     throw new Error('Finish or reconcile outstanding API calls before changing the model');

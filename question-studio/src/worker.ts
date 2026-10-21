@@ -5,7 +5,8 @@ import { config } from './config.js';
 import { state, event, save, safeError } from './store.js';
 import { runStructured, BudgetError, RecoverableApiError, RequestPausedError, ResponsePollingError, UnidentifiedApiOutcomeError } from './provider.js';
 import { generationPrompt, reviewPrompt } from './prompts.js';
-import { generationSchema, reviewSchema, languages, difficulties, type Difficulty, type StoredQuestion, type Topic } from './schema.js';
+import { generationSchema, reviewSchema, languages, difficulties, type Difficulty, type StoredQuestion, type Topic, type GenerationJob } from './schema.js';
+import { runParallelPipeline } from './pipeline.js';
 import { saveQuestionToDatabase, uploadImage } from './database.js';
 import { renderQuestion } from './render.js';
 import { researchTopic } from './research.js';
@@ -62,14 +63,16 @@ export async function rerenderQuestions(ids: string[]) {
   await event(`Изображения обновлены: ${ids.length} заданий.`);
 }
 
-async function generateBatch(topic: Topic) {
-  const existingGeneration = state.calls.find(call => call.id === state.generationCallId);
+async function generateBatch(topic: Topic, job?: GenerationJob, shouldPause: () => boolean = () => pauseRequested) {
+  const existingGeneration = state.calls.find(call => call.id === (job ? job.generationCallId : state.generationCallId));
+  if (job && !existingGeneration) { job.stage = 'research'; await save(); }
   const research = state.mode !== 'generate' ? undefined : existingGeneration
     ? existingGeneration.researchResponseId ? topic.research : undefined
-    : await researchTopic(topic, () => pauseRequested);
-  if (pauseRequested) return;
-  const count = Math.min(state.config.batchSize, topic.target - topic.generated);
-  const plan = difficultyPlan(count);
+    : await researchTopic(topic, shouldPause);
+  if (shouldPause()) return;
+  const count = job?.count ?? Math.min(state.config.batchSize, topic.target - topic.generated);
+  const plan = job?.difficultyPlan ?? difficultyPlan(count);
+  if (job) job.stage = 'generation';
   const sourceEnd = Math.min(state.sourceText.length, state.sourceOffset + 12000);
   await event(`${topic.name}: составляю ${count} заданий (${plan.join(', ')}).`, 'info', topic.id);
   const result = await runStructured('generation', generationPrompt, {
@@ -88,13 +91,14 @@ async function generateBatch(topic: Topic) {
       eligibleTopics: state.topics.filter(t => t.eligible).map(t => ({ id: t.id, path: t.path })),
     } : {}),
   }, generationSchema, id => {
-    state.generationCallId = id;
+    if (job) job.generationCallId = id;
+    else state.generationCallId = id;
     const call = state.calls.find(item => item.id === id)!;
     if (research?.sources.length) {
       call.researchResponseId = research.responseId;
       call.referenceSources = research.sources.map(source => ({ ...source }));
     }
-  }, state.generationCallId || undefined, () => pauseRequested);
+  }, (job ? job.generationCallId : state.generationCallId) ?? undefined, shouldPause);
   if (state.mode === 'generate' && result.data.questions.length !== count) throw new BatchContentError('Модель вернула неверное количество вопросов');
   if (state.mode === 'parse' && (!result.data.consumedSource
     || !state.sourceText.slice(state.sourceOffset, sourceEnd).startsWith(result.data.consumedSource))) {
@@ -106,41 +110,45 @@ async function generateBatch(topic: Topic) {
     topic.rationale = result.data.rationale;
     topic.coverageGoals = result.data.coverageGoals;
   }
-  state.pendingBatch = {
+  const batch = {
     questions: result.data.questions, generationCallId: result.callId,
     ...(state.mode === 'parse' ? { sourceEnd: state.sourceOffset + result.data.consumedSource.length } : {}),
   };
-  state.generationCallId = null;
+  if (job) { job.batch = batch; delete job.generationCallId; job.stage = 'review'; }
+  else { state.pendingBatch = batch; state.generationCallId = null; }
   await save();
 }
 
-async function processBatch() {
-  const batch = state.pendingBatch!;
+async function processBatch(job?: GenerationJob, shouldPause: () => boolean = () => pauseRequested) {
+  const batch = (job ? job.batch : state.pendingBatch)!;
   const generationCall = state.calls.find(c => c.id === batch.generationCallId)!;
   if (!batch.questions.length) {
     if (batch.sourceEnd === undefined) throw new Error('Пустая партия генерации');
     state.sourceOffset = batch.sourceEnd;
-    state.pendingBatch = null;
+    if (job) delete job.batch;
+    else state.pendingBatch = null;
     await event('Обработан фрагмент исходника без полных заданий.');
     return;
   }
   await event('Независимая проверка: решение, переводы, объяснения, подсказки и чертежи.');
+  if (job) job.stage = 'review';
   const review = await runStructured('review', reviewPrompt, {
     questions: batch.questions.map(({ correctOption: _answer, ...q }, index) => ({ index, ...q })),
     topics: state.topics.filter(t => batch.questions.some(q => q.primaryTopicId === t.id)).map(t => ({ id: t.id, path: t.path })),
     history: state.questions.filter(q => q.validation.passed && q.generation.responseId !== generationCall.responseId
       && batch.questions.some(b => b.primaryTopicId === q.topic)).slice(-40).map(q => q.translations.kk.text),
-  }, reviewSchema, id => { batch.reviewCallId = id; }, batch.reviewCallId, () => pauseRequested);
+  }, reviewSchema, id => { batch.reviewCallId = id; }, batch.reviewCallId, shouldPause);
   if (review.data.reviews.length !== batch.questions.length
     || new Set(review.data.reviews.map(r => r.index)).size !== batch.questions.length
     || review.data.reviews.some(r => r.index >= batch.questions.length)) {
     throw new BatchContentError('Проверяющая модель не вернула однозначный результат для каждого задания');
   }
+  if (job) { job.stage = 'publishing'; await save(); }
   for (const [index, generated] of batch.questions.entries()) {
     const id = hash(`${state.runId}:${generationCall.responseId}:${index}`).slice(0, 40);
     if (state.questions.some(q => q.id === id)) continue;
     const verdict = review.data.reviews.find(v => v.index === index)!;
-    const issues = assessQuestion(generated, verdict, state.mode === 'generate' ? state.activeTopicId! : undefined);
+    const issues = assessQuestion(generated, verdict, state.mode === 'generate' ? job?.topicId ?? state.activeTopicId! : undefined);
     const fingerprint = questionFingerprint(generated);
     const question: StoredQuestion = {
       id, topic: generated.primaryTopicId, difficulty: generated.difficulty, correctOption: generated.correctOption,
@@ -163,18 +171,21 @@ async function processBatch() {
       : `Задание отправлено на исправление: ${issues.join('; ')}`, question.validation.passed ? 'success' : 'warning', question.topic);
   }
   if (batch.sourceEnd !== undefined) state.sourceOffset = batch.sourceEnd;
-  const activeTopic = state.topics.find(t => t.id === state.activeTopicId);
+  const activeTopic = state.topics.find(t => t.id === (job?.topicId ?? state.activeTopicId));
+  let topicDeferred = false;
   if (activeTopic && state.mode === 'generate') {
     const accepted = state.questions.some(q => q.generation.responseId === generationCall.responseId && q.validation.passed);
     activeTopic.failedBatches = accepted ? 0 : (activeTopic.failedBatches || 0) + 1;
-    if (activeTopic.failedBatches >= config.maxTopicFailures) await event('Новые партии темы отложены; сначала исправляются отклонённые задания.', 'warning', activeTopic.id);
+    topicDeferred = activeTopic.failedBatches >= config.maxTopicFailures;
     activeTopic.requestFailures = 0;
   }
-  state.pendingBatch = null;
-  await save();
+  if (job) state.jobs = state.jobs!.filter(item => item.id !== job.id);
+  else state.pendingBatch = null;
+  if (topicDeferred) await event('Новые партии темы отложены; сначала исправляются отклонённые задания.', 'warning', activeTopic!.id);
+  else await save();
 }
 
-async function loop() {
+async function serialLoop() {
   state.status = 'running'; state.error = null;
   await save();
   try {
@@ -275,7 +286,6 @@ async function loop() {
     state.error = safeError(error);
     await event(state.error, 'error');
   } finally {
-    running = null;
     await save();
   }
 }
@@ -283,7 +293,9 @@ export function startWorker() {
   if (config.executionOwner === 'google-apps-script') throw new Error('This run belongs to the cloud worker; local generation is disabled');
   if (running) throw new Error('Генерация уже выполняется');
   pauseRequested = false;
-  running = loop();
+  running = (state.mode === 'generate'
+    ? runParallelPipeline({ generate: generateBatch, review: processBatch }, () => pauseRequested)
+    : serialLoop()).finally(async () => { try { await save(); } finally { running = null; } });
   running.catch(error => {
     state.status = 'error'; state.error = safeError(error);
     process.stderr.write(`${state.error}\n`);

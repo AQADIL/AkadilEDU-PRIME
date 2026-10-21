@@ -15,8 +15,10 @@ function questionInput(question: StoredQuestion): GeneratedQuestion {
   return generatedQuestionSchema.parse({ primaryTopicId: question.topic, difficulty: question.difficulty,
     correctOption: question.correctOption, diagram: question.diagram, translations });
 }
-export function nextRepair(): StoredQuestion | undefined {
+export function nextRepair(excludedTopics: ReadonlySet<string> = new Set(), readyAt = Date.now()): StoredQuestion | undefined {
   return state.questions.find(question => !question.validation.passed
+    && !excludedTopics.has(question.topic)
+    && (question.repair?.retryAt ?? 0) <= readyAt
     && (!state.selectedTopicIds.length || state.selectedTopicIds.includes(question.topic))
     && state.topics.some(topic => topic.id === question.topic && topic.eligible)
     && question.repair?.status !== 'exhausted' && question.repair?.status !== 'completed'
@@ -27,6 +29,7 @@ export async function repairQuestion(question: StoredQuestion, shouldPause: () =
     issues: [...question.validation.issues], generationResponseId: question.generation.responseId,
     reviewResponseId: question.generation.reviewResponseId }] };
   const repair = question.repair;
+  delete repair.retryAt;
   if (repair.status !== 'running') {
     if (shouldPause()) throw new RequestPausedError();
     repair.attempts += 1;

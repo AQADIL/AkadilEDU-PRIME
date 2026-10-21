@@ -27,11 +27,25 @@ export function assessQuestion(question: GeneratedQuestion, verdict: Verdict, ex
   }
   return [...new Set([...issues, ...verdict.issues])];
 }
-export async function publishValidatedQuestion(question: StoredQuestion): Promise<boolean> {
+let publicationQueue = Promise.resolve();
+export function publishValidatedQuestion(question: StoredQuestion): Promise<boolean> {
+  const operation = publicationQueue.then(() => publishQuestion(question));
+  publicationQueue = operation.then(() => undefined, () => undefined);
+  return operation;
+}
+async function publishQuestion(question: StoredQuestion): Promise<boolean> {
   if (!question.validation.passed) return false;
   try {
     const images = await renderQuestion(question);
-    if (images) for (const language of languages) question.translations[language].imageUrl = await uploadImage(question.id, images[language]);
+    if (images) {
+      const uploaded = new Map<string, string>();
+      for (const language of languages) {
+        const filename = images[language];
+        let url = uploaded.get(filename);
+        if (!url) { url = await uploadImage(question.id, filename); uploaded.set(filename, url); }
+        question.translations[language].imageUrl = url;
+      }
+    }
     if (config.autoPublish) question.status = 'published';
     await saveQuestionToDatabase(question);
     return true;

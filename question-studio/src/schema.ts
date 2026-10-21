@@ -49,6 +49,24 @@ export const generationSchema = z.strictObject({
   consumedSource: z.string().max(12000),
   questions: z.array(generatedQuestionSchema).max(5),
 });
+export const pendingBatchSchema = z.strictObject({
+  questions: z.array(generatedQuestionSchema).max(5),
+  generationCallId: z.uuid(),
+  reviewCallId: z.uuid().optional(),
+  sourceEnd: z.number().int().nonnegative().optional(),
+});
+export const generationJobSchema = z.strictObject({
+  id: z.uuid(),
+  topicId: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
+  count: z.number().int().min(1).max(5),
+  difficultyPlan: z.array(z.enum(difficulties)).min(1).max(5),
+  stage: z.enum(['research', 'generation', 'review', 'publishing', 'waiting']),
+  generationCallId: z.uuid().optional(),
+  batch: pendingBatchSchema.optional(),
+  retryAt: z.number().int().nonnegative().optional(),
+}).refine(job => job.difficultyPlan.length === job.count && (!job.batch || job.batch.questions.length === job.count),
+  'Job questions or difficulty plan do not match its count');
+export type GenerationJob = z.infer<typeof generationJobSchema>;
 export const reviewSchema = z.strictObject({
   reviews: z.array(z.strictObject({
     index: z.number().int().min(0).max(4),
@@ -101,6 +119,7 @@ export interface StoredQuestion {
     status: 'pending' | 'running' | 'completed' | 'exhausted';
     generationCallId?: string;
     reviewCallId?: string;
+    retryAt?: number;
     candidate?: GeneratedQuestion;
     history: { attempt: number; issues: string[]; generationResponseId?: string; reviewResponseId?: string }[];
   };
@@ -258,7 +277,8 @@ export interface StudioState {
   sourceOffset: number;
   selectedTopicIds: string[];
   generationCallId: string | null;
-  pendingBatch: { questions: GeneratedQuestion[]; generationCallId: string; reviewCallId?: string; sourceEnd?: number } | null;
+  pendingBatch: z.infer<typeof pendingBatchSchema> | null;
+  jobs?: GenerationJob[];
 }
 
 const latex = /\\[A-Za-z]+|\\[()[\]]|\$\$?|\^\{|_\{/;

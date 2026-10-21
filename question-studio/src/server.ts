@@ -67,7 +67,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     try {
     if (url.pathname === '/api/start') {
       if (state.status === 'running') throw new Error('Генерация уже выполняется');
-      if (state.pendingBatch || state.generationCallId) throw new Error('Сначала продолжите незавершённую партию');
+      if (state.pendingBatch || state.generationCallId || state.jobs?.length) throw new Error('Сначала продолжите незавершённые партии');
       const input = startSchema.parse(body);
       if (input.mode === 'parse' && !input.sourceText?.trim()) throw new Error('Добавьте текст для разбора');
       const selected = input.topicIds || [];

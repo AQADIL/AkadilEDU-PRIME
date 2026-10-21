@@ -93,6 +93,14 @@ const callLabel = (kind: ApiCall['kind']) => ({
   generation: 'Генерация', repair: 'Исправление', review: 'Проверка', research: 'Поиск источников',
 })[kind];
 
+const activeCreations = new Set<string>();
+let admissions = Promise.resolve();
+function admitRequest<T>(operation: () => Promise<T>): Promise<T> {
+  const result = admissions.then(operation);
+  admissions = result.then(() => undefined, () => undefined);
+  return result;
+}
+
 function normalizeGenerationResult(kind: ApiCall['kind'], value: unknown): unknown {
   if (kind !== 'generation' || !value || typeof value !== 'object' || Array.isArray(value)) return value;
   const result = value as Record<string, unknown>;
@@ -228,9 +236,6 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       throw new RecoverableApiError(previous.id, previous.terminalReason!);
     }
     if (!call || previous) {
-      if (state.calls.some(item => (item.status === 'uncertain' && !item.quarantined) || item.status === 'reserved')) {
-        throw new Error('Uncertain API accounting must be reconciled before any new paid request');
-      }
       if (previous && ['server_error', 'rate_limit_exceeded', 'vector_store_timeout'].includes(previous.terminalReason!)) {
         await delay(Math.min(2000 * 2 ** (attemptNumber(previous) - 1), 30000));
       }
@@ -250,10 +255,7 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       };
       const webSearchMaxCalls = previous?.webSearchMaxCalls ?? config.webSearchMaxCalls;
       const reserved = estimateReservation(instructions, inputText, jsonSchema, kind, maxOutputTokens, prices, webSearchMaxCalls);
-      if (state.budget.spent + state.budget.reserved + reserved > state.budget.limit) {
-        throw new BudgetError('Оставшегося бюджета недостаточно для безопасного резерва следующего запроса.');
-      }
-      call = {
+      const candidate: ApiCall = {
         id: randomUUID(), kind, model: previous?.model ?? (kind === 'review' ? config.reviewModel : config.model),
         serviceTier: previous?.serviceTier ?? config.serviceTier, prices: { ...prices },
         maxOutputTokens, attempt: previous ? attemptNumber(previous) + 1 : 1,
@@ -265,13 +267,44 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
         ...(kind === 'research' ? { webSearchMaxCalls } : {}),
         status: 'reserved', reserved, cost: 0,
       };
-      state.calls.push(call);
-      if (previous) previous.retryCallId = call.id;
-      onReserved(call.id);
-      await save();
-      if (previous) {
-        await event(`${callLabel(kind)}: автоматическая попытка ${call.attempt}/${config.apiMaxAttempts}, причина: ${previous.terminalReason}. Лимит ответа: ${maxOutputTokens}.`);
-      }
+      call = await admitRequest(async () => {
+        if (shouldPause?.()) throw new RequestPausedError('Пауза запрошена до следующего API-запроса.');
+        for (const recorded of state.calls) {
+          assertSettledCallWithinReservation(recorded);
+          if (!Number.isFinite(recorded.cost) || recorded.cost < 0
+            || !Number.isFinite(recorded.reserved) || recorded.reserved < 0) {
+            throw new Error('Invalid API accounting data; paid requests are stopped');
+          }
+        }
+        if (state.calls.some(item => (item.status === 'uncertain' && !item.quarantined)
+          || (item.status === 'reserved' && !activeCreations.has(item.id)))) {
+          throw new Error('Uncertain API accounting must be reconciled before any new paid request');
+        }
+        const overrun = state.calls.find(exceededWebSearchLimit);
+        if (kind === 'research' && overrun) {
+          throw new RecoverableApiError(previous?.id ?? overrun.id, 'web_search_disabled_after_overrun');
+        }
+        const spent = state.calls.reduce((sum, item) => sum + item.cost, 0);
+        const held = state.calls.filter(item => item.status !== 'settled').reduce((sum, item) => sum + item.reserved, 0);
+        if (!Number.isFinite(state.budget.limit) || state.budget.limit <= 0
+          || !Number.isFinite(reserved) || reserved <= 0
+          || spent + held + reserved > state.budget.limit) {
+          throw new BudgetError('Оставшегося бюджета недостаточно для безопасного резерва следующего запроса.');
+        }
+        activeCreations.add(candidate.id);
+        state.calls.push(candidate);
+        if (previous) previous.retryCallId = candidate.id;
+        try {
+          onReserved(candidate.id);
+          await save();
+          return candidate;
+        } catch (error) {
+          candidate.status = 'uncertain';
+          candidate.quarantined = true;
+          activeCreations.delete(candidate.id);
+          throw error;
+        }
+      });
       try {
         const created = await request('/responses', {
           model: call.model, service_tier: call.serviceTier, instructions, input: inputText,
@@ -288,12 +321,17 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
         call.responseId = created.id;
         call.status = 'pending';
         await save();
+        if (previous) {
+          await event(`${callLabel(kind)}: автоматическая попытка ${call.attempt}/${config.apiMaxAttempts}, причина: ${previous.terminalReason}. Лимит ответа: ${maxOutputTokens}.`);
+        }
       } catch (error) {
         call.status = call.responseId ? 'pending' : 'uncertain';
         if (!call.responseId) call.quarantined = true;
         await save();
         if (!call.responseId) throw new UnidentifiedApiOutcomeError(call.id);
         throw new ResponsePollingError(config.recoveryBackoffMs);
+      } finally {
+        activeCreations.delete(call.id);
       }
     }
     let pollFailures = 0;

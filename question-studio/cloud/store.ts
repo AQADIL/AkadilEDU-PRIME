@@ -61,6 +61,7 @@ export function importState(value: unknown) {
   const properties = PropertiesService.getScriptProperties();
   if (properties.getProperty('STUDIO_STATE_SLOTS')) throw new Error('Cloud state already exists; replacing its budget is forbidden');
   state = validateState(value);
+  if (state.jobs?.length) throw new Error('Finish local parallel jobs before migrating to the serial cloud worker');
   if (state.status === 'running') throw new Error('Pause the local worker before migration');
   if (state.calls.some(call => call.status === 'uncertain')) throw new Error('Reconcile uncertain API calls before migration');
   state.budget.limit = Math.min(state.budget.limit, config.budget);
