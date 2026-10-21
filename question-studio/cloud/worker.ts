@@ -69,7 +69,7 @@ function generateBatch(topic: Topic) {
     ? existingGeneration.researchResponseId ? topic.research : undefined
     : researchTopic(topic, shouldPause);
   if (shouldPause()) return;
-  const count = Math.min(state.mode === 'generate' && topic.generated === 0 ? 1 : state.config.batchSize, topic.target - topic.generated);
+  const count = Math.min(state.config.batchSize, topic.target - topic.generated);
   const plan = difficultyPlan(count);
   const sourceEnd = Math.min(state.sourceText.length, state.sourceOffset + 12000);
   event(`${topic.name}: составляю ${count} заданий (${plan.join(', ')}).`, 'info', topic.id);
