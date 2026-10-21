@@ -169,6 +169,18 @@ export interface ApiCall {
   result?: unknown;
 }
 const tokenCount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
+export function assertSettledCallWithinReservation(call: ApiCall): void {
+  if (call.status !== 'settled') return;
+  if (!Number.isFinite(call.cost) || !Number.isFinite(call.reserved) || call.cost < 0 || call.reserved < 0
+    || call.cost > call.reserved + 1e-9) {
+    throw new Error('Стоимость API-запроса превысила резерв. Новые запросы остановлены до сверки расходов.');
+  }
+  if (call.kind === 'research' && (!Number.isSafeInteger(call.webSearchCalls) || call.webSearchCalls! < 0
+    || !Number.isSafeInteger(call.webSearchMaxCalls) || call.webSearchMaxCalls! < 1
+    || call.webSearchCalls! > call.webSearchMaxCalls!)) {
+    throw new Error('Число платных поисков превысило резерв. Новые запросы остановлены до сверки расходов.');
+  }
+}
 export const usageSchema = z.object({
   input_tokens: tokenCount,
   output_tokens: tokenCount,

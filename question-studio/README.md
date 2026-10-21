@@ -59,3 +59,5 @@ State, API response IDs, review results and local images are kept in `STUDIO_DAT
 Use one studio process per data directory. A process lock prevents concurrent writers. Do not delete the data directory to reset the displayed spend: that would discard the run's accounting. Credentials, local configuration and the default `.data` directory are excluded from Git.
 
 Firebase billing is separate. Text is stored in Realtime Database; only needed images are stored in Cloud Storage. Download volume and other existing project services also affect charges. A Google Cloud budget alert alone does not impose a spending cap.
+
+Web-search reservation checks count paid `search` actions, separately from the total `web_search_call` items (which can also contain page opens and in-page finds). Saved usage still includes all input/output tokens. Every settled call is checked against its monetary reservation before further API work; a genuine cost or paid-search-count overrun stops new requests. Recovery retrieves the existing response ID without another paid creation request.

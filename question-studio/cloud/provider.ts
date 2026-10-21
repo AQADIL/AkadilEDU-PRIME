@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { config } from './config.js';
 import { state, save, event } from './store.js';
 import type { ApiCall, ModelPrices, ReferenceSource } from '../src/schema.js';
-import { calculateUsageCost, usageSchema } from '../src/schema.js';
+import { assertSettledCallWithinReservation, calculateUsageCost, usageSchema } from '../src/schema.js';
 
 const responseSchema = z.object({
   id: z.string(),
@@ -183,6 +183,7 @@ export function runStructured<T>(kind: ApiCall['kind'], instructions: string, in
     data: T; responseId: string; callId: string; model: string;
     sources: ReferenceSource[]; webSearchCalls: number; webToolCalls: number;
   } {
+  for (const recorded of state.calls) assertSettledCallWithinReservation(recorded);
   const jsonSchema = z.toJSONSchema(schema);
   delete jsonSchema.$schema;
   const inputText = JSON.stringify(input);
@@ -317,9 +318,7 @@ export function runStructured<T>(kind: ApiCall['kind'], instructions: string, in
     if (call.status !== 'settled') {
       throw new Error('OpenAI returned no usage; the reservation is retained until accounting can be reconciled');
     }
-    if (kind === 'research' && web.webToolCalls > call.webSearchMaxCalls!) {
-      throw new Error('OpenAI exceeded the reserved web-tool call limit; further generation is stopped');
-    }
+    assertSettledCallWithinReservation(call);
     if (response.status === 'incomplete') {
       const reason = response.incomplete_details?.reason || 'incomplete_response';
       terminalFailure(call, reason, reason === 'max_output_tokens');
