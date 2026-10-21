@@ -3,7 +3,12 @@ import { config, initializeConfig } from './config.js';
 import { event, importState, loadState, safeError, save, state } from './store.js';
 import { runWorkerStep } from './worker.js';
 import { request } from './api.js';
-import { loadTopics } from './database.js';
+import { loadTopics, requestDatabase } from './database.js';
+import { sha256 } from './provider.js';
+
+function localOwnsRun() {
+  return PropertiesService.getScriptProperties().getProperty('STUDIO_EXECUTION_OWNER') === 'local';
+}
 
 function owner(interactive: boolean) {
   const effective = Session.getEffectiveUser().getEmail().toLowerCase();
@@ -27,7 +32,10 @@ export function doGet() {
 }
 
 export function studioRequest(path: unknown, body: unknown) {
-  return locked(true, () => request(path, body));
+  return locked(true, () => {
+    if (localOwnsRun() && path !== '/api/state') throw new Error('Генерация перенесена на ноутбук. Облачное состояние больше не является актуальным.');
+    return request(path, body);
+  });
 }
 
 export function bootstrapCloud() {
@@ -53,6 +61,7 @@ export function bootstrapCloud() {
 
 export function activateCloud() {
   return locked(true, () => {
+    if (localOwnsRun()) throw new Error('Для возврата в облако сначала перенесите актуальное состояние с ноутбука');
     if (state.calls.some(call => call.status === 'uncertain' || call.status === 'reserved')) throw new Error('Сначала требуется сверка неопределённых API-запросов');
     if (state.budget.spent + state.budget.reserved >= state.budget.limit) throw new Error('Лимит API исчерпан');
     if (!ScriptApp.getProjectTriggers().some(trigger => trigger.getHandlerFunction() === 'cloudTick')) {
@@ -70,6 +79,7 @@ const runtimeSchema = z.object({ startedAt: z.number().nonnegative(), used: z.nu
 export function cloudTick() {
   const startedAt = Date.now();
   initializeConfig(); owner(false);
+  if (localOwnsRun()) return;
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(1000)) return;
   const properties = PropertiesService.getScriptProperties();
@@ -107,4 +117,22 @@ export function cloudStatus() {
     tick: PropertiesService.getScriptProperties().getProperty('STUDIO_LAST_TICK'),
     error: PropertiesService.getScriptProperties().getProperty('STUDIO_TICK_ERROR') || state.error,
     triggers: ScriptApp.getProjectTriggers().filter(trigger => trigger.getHandlerFunction() === 'cloudTick').length }));
+}
+
+export function handoffToLocal() {
+  return locked(true, () => {
+    state.status = 'paused';
+    event('Генерация передана локальной студии. Облачный таймер остановлен.');
+    save();
+    PropertiesService.getScriptProperties().setProperty('STUDIO_EXECUTION_OWNER', 'local');
+    for (const trigger of ScriptApp.getProjectTriggers()) {
+      if (trigger.getHandlerFunction() === 'cloudTick') ScriptApp.deleteTrigger(trigger);
+    }
+    const serialized = JSON.stringify(state);
+    const payload = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(serialized, 'application/json')).getBytes());
+    requestDatabase(`questionStudioMigrations/${state.runId}`, 'put', {
+      runId: state.runId, destination: 'local', exportedAt: Date.now(), checksum: sha256(serialized), payload,
+    });
+    return { runId: state.runId, budget: state.budget, totals: state.totals, status: state.status };
+  });
 }

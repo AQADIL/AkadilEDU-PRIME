@@ -14,7 +14,7 @@ const required = name => {
 };
 const output = path.join(root, '.cloud-build');
 await mkdir(output, { recursive: true });
-const functions = ['doGet', 'studioRequest', 'bootstrapCloud', 'activateCloud', 'cloudTick', 'cloudStatus'];
+const functions = ['doGet', 'studioRequest', 'bootstrapCloud', 'activateCloud', 'cloudTick', 'cloudStatus', 'handoffToLocal'];
 await build({ entryPoints: [path.join(root, 'cloud/entry.ts')], outfile: path.join(output, 'Code.js'),
   bundle: true, format: 'iife', globalName: 'AkadilCloud', platform: 'neutral', target: 'es2020',
   minify: true, legalComments: 'none',
