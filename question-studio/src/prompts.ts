@@ -15,6 +15,14 @@ Avoid repetitive templates and mere numeric substitutions; vary reasoning, repre
 In the statement, render fractions as stacked LaTeX fractions inside $...$ or $$...$$ delimiters.
 Also use delimited LaTeX for nested radicals, systems, stacked expressions and other mathematics whose
 plain-text layout would be difficult to read. These statement formulas are rendered into a PNG image.
+Keep translated instructions OUTSIDE the image. When a statement can be separated into prose and a
+formula, put all localized instructions first and then the standalone formula block at the END of text,
+with no prose after it. Use exactly the same formula notation and delimiters in kk, ru and en. The renderer
+will show the translated prefix separately and reuse ONE formula image across all three languages.
+For example, translate the instruction "Solve the equation:" but keep the equation block identical.
+Keep geometry instructions outside the drawing; prefer shared numeric values and neutral point labels.
+Only embed translated words in a visual when essential. If prose and formulas cannot be separated without
+changing meaning, preserve their complete order; separate language images are allowed in that case.
 Keep simple powers, signs and short expressions as readable Unicode: x², √x, ±, ≠, ≤, ≥.
 Options, explanations and hints MUST ALWAYS be plain text with Unicode and ordinary letters, never
 LaTeX or images. In those fields write fractions using / with explicit parentheses to preserve meaning;
@@ -81,6 +89,14 @@ In the statement, use stacked LaTeX fractions and delimited LaTeX for complex la
 read as plain text; enclose formulas in $...$ or $$...$$ so they become a statement image.
 Options, explanations and hints must always remain plain Unicode and ordinary letters, without LaTeX
 or images. Use / with explicit parentheses for fractions and short readable steps in these fields.
+Keep translated instructions OUTSIDE the image. When a statement can be separated into prose and a
+formula, put all localized instructions first and then the standalone formula block at the END of text,
+with no prose after it. Use exactly the same formula notation and delimiters in kk, ru and en. The renderer
+will show the translated prefix separately and reuse ONE formula image across all three languages.
+For example, translate the instruction "Solve the equation:" but keep the equation block identical.
+Keep geometry instructions outside the drawing; prefer shared numeric values and neutral point labels.
+Only embed translated words in a visual when essential. If prose and formulas cannot be separated without
+changing meaning, preserve their complete order; separate language images are allowed in that case.
 Never use raw LaTeX commands or alternative delimiters. Keep diagrams separate
 from statement text, accurate, readable and language-neutral where possible. Do not invent source URLs.
 Output only the strict schema. Be concise but mathematically complete.`;

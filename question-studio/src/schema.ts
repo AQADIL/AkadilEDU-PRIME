@@ -67,6 +67,7 @@ export const reviewSchema = z.strictObject({
 });
 
 export type Translation = z.infer<typeof translationSchema> & {
+  displayText?: string;
   imageUrl?: string;
   localImageUrl?: string;
   imageContainsStatement?: boolean;

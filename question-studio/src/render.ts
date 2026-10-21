@@ -6,6 +6,7 @@ import { config, studioRoot } from './config.js';
 import { languages, type Language, type StoredQuestion } from './schema.js';
 import { diagramSvg } from './diagram.js';
 import { arrangeDiagramLabels } from './diagramLayout.js';
+import { statementPresentation } from './statementPresentation.js';
 
 let browser: Browser | undefined;
 export class QuestionRenderError extends Error {}
@@ -22,12 +23,14 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
   const rendered = new Map<string, string>();
   for (const language of languages) {
     const translation = question.translations[language];
-    const text = translation.text;
-    const containsStatement = /\$|\\[A-Za-z]+/.test(text);
+    const presentation = statementPresentation(translation.text);
+    const text = presentation.imageText;
+    const hasFormula = Boolean(text);
     const drawing = question.diagram ? diagramSvg(question.diagram, language) : '';
-    const signature = JSON.stringify([containsStatement ? text : '', drawing]);
+    const signature = JSON.stringify([text, drawing]);
     const existing = rendered.get(signature);
-    translation.imageContainsStatement = containsStatement;
+    translation.imageContainsStatement = presentation.containsStatement;
+    translation.displayText = presentation.displayText;
     if (existing) {
       result[language] = existing;
       translation.localImageUrl = `/media/${path.basename(existing)}`;
@@ -50,13 +53,13 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
         } else await route.abort();
       });
       await page.setContent(`<!doctype html><html lang="${language}"><head><meta charset="utf-8">
-        ${containsStatement ? `<link rel="stylesheet" href="${config.origin}/vendor/katex/katex.min.css">` : ''}
+        ${hasFormula ? `<link rel="stylesheet" href="${config.origin}/vendor/katex/katex.min.css">` : ''}
         <style>body{margin:0;background:white;color:#182840;font:22px/1.65 Arial,sans-serif}
         article{box-sizing:border-box;width:840px;padding:36px}p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
         svg{display:block;width:100%}#statement+svg{margin-top:24px}
-        .katex{font-size:1.1em}</style></head><body><article>${containsStatement ? `<p id="statement">${escape(text)}</p>` : ''}
+        .katex{font-size:1.1em}</style></head><body><article>${hasFormula ? `<p id="statement">${escape(text)}</p>` : ''}
         ${drawing}</article></body></html>`, { waitUntil: 'networkidle' });
-      if (containsStatement && /\$/.test(text)) {
+      if (hasFormula && /\$/.test(text)) {
         await page.addScriptTag({ path: path.join(studioRoot, 'node_modules/katex/dist/katex.min.js') });
         await page.addScriptTag({ path: path.join(studioRoot, 'node_modules/katex/dist/contrib/auto-render.min.js') });
         try { await page.evaluate(() => {

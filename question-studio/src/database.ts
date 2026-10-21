@@ -51,11 +51,11 @@ export async function saveQuestionToDatabase(question: StoredQuestion) {
     throw new Error('Question ID belongs to a different generation run');
   }
   const translations = Object.fromEntries(languages.map(lang => {
-    const { localImageUrl: _local, ...content } = question.translations[lang];
-    return [lang, content];
+    const { localImageUrl: _local, displayText, ...content } = question.translations[lang];
+    return [lang, { ...content, text: displayText ?? content.text }];
   }));
   await reference.update({
-    ...question.translations.kk, localImageUrl: null, translations,
+    ...translations.kk, localImageUrl: null, translations,
     topic: question.topic, difficulty: question.difficulty, correctOption: question.correctOption,
     status: question.status === 'published' ? 'published' : 'draft',
     schemaVersion: 2, diagram: question.diagram, validation: question.validation,

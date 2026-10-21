@@ -428,8 +428,10 @@ function renderQuestion() {
     content.append(provenance);
     const translation = question.translations?.[questionLanguage];
     if (translation) {
-      content.append(element('p', 'question-text', translation.text));
       const imageUrl = cloudTransport ? translation.imageUrl : translation.localImageUrl ?? translation.imageUrl;
+      if (!safeImageUrl(imageUrl) || translation.imageContainsStatement === false) {
+        content.append(element('p', 'question-text', safeImageUrl(imageUrl) ? translation.displayText ?? translation.text : translation.text));
+      }
       if (safeImageUrl(imageUrl)) {
         const image = element('img', 'question-image');
         image.src = imageUrl;
