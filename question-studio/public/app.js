@@ -157,6 +157,14 @@ const workspaceBody = element('div', 'workspace-body');
 const runTitle = element('h2', 'run-title', t('workspace'));
 const modelLine = element('p', 'model-line', t('connection'));
 const totals = element('div', 'totals');
+const pipeline = element('section', 'pipeline');
+pipeline.setAttribute('aria-label', t('parallelWork'));
+pipeline.hidden = true;
+const pipelineHeading = element('div', 'pipeline-heading');
+const pipelineSummary = element('span', 'pipeline-summary number');
+pipelineHeading.append(element('h2', '', t('parallelWork')), pipelineSummary);
+const pipelineJobs = element('ul', 'pipeline-jobs');
+pipeline.append(pipelineHeading, pipelineJobs);
 const errorNotice = element('div', 'notice');
 errorNotice.setAttribute('role', 'alert');
 errorNotice.hidden = true;
@@ -207,7 +215,7 @@ pause.hidden = true;
 resume.hidden = true;
 actionRow.append(run, pause, resume, connection);
 composer.append(modeRow, fields, sourceField, plan, difficultyMix, budgetNote, actionRow);
-workspace.append(workspaceHeader, workspaceBody, composer);
+workspace.append(workspaceHeader, pipeline, workspaceBody, composer);
 
 const review = element('aside', 'review');
 review.setAttribute('aria-label', t('review'));
@@ -292,11 +300,12 @@ function renderTopics() {
   const topics = state?.topics ?? [];
   const query = search.value.trim().toLocaleLowerCase();
   const filtered = topics.filter(topic => `${displayTopicName(topic)} ${(topic.path ?? []).join(' ')}`.toLocaleLowerCase().includes(query));
+  const activeTopicIds = new Set(state?.activeTopicIds ?? (state?.activeTopicId ? [state.activeTopicId] : []));
   topicsSelected.textContent = t('selectedTopics', { count: number.format(selectedTopics.size) });
-  replaceWhenChanged('topics', topicList, [filtered, [...selectedTopics], state?.activeTopicId], () => {
+  replaceWhenChanged('topics', topicList, [filtered, [...selectedTopics], [...activeTopicIds]], () => {
     if (!filtered.length) return [element('p', 'empty', t(topics.length ? 'noMatches' : 'noTopics'))];
     return filtered.map(topic => {
-      const label = element('label', `topic-item${topic.id === state.activeTopicId ? ' active' : ''}${topic.eligible ? '' : ' disabled'}`);
+      const label = element('label', `topic-item${activeTopicIds.has(topic.id) ? ' active' : ''}${topic.eligible ? '' : ' disabled'}`);
       const checkbox = input('checkbox', { checked: selectedTopics.has(topic.id), disabled: !topic.eligible || pending || state.status === 'running' });
       checkbox.className = '';
       checkbox.addEventListener('change', () => {
@@ -317,6 +326,29 @@ function renderTopics() {
       return label;
     });
   });
+}
+
+function renderPipeline() {
+  const progress = state?.pipeline;
+  pipeline.hidden = !progress;
+  if (!progress) return;
+  pipelineSummary.textContent = t('parallelSummary', {
+    concurrency: number.format(progress.concurrency),
+    requests: number.format(progress.activeRequests),
+  });
+  replaceWhenChanged('pipeline', pipelineJobs, progress.jobs, () => progress.jobs.map(job => {
+    const row = element('li', 'pipeline-job');
+    row.dataset.stage = job.stage;
+    const topic = state.topics.find(item => item.id === job.topicId);
+    row.append(element('span', 'pipeline-topic', job.topicName || (topic ? displayTopicName(topic) : job.topicId)));
+    const details = element('span', 'pipeline-details');
+    const retryAt = new Date(job.retryAt);
+    const stage = job.stage === 'waiting' && job.retryAt && !Number.isNaN(retryAt.getTime())
+      ? t('parallelWaitingUntil', { time: time.format(retryAt) }) : t(`parallel_${job.stage}`);
+    details.append(element('span', 'pipeline-stage', stage), element('span', 'number', t('parallelQuestionCount', { count: number.format(job.count) })));
+    row.append(details);
+    return row;
+  }));
 }
 
 function renderPlan() {
@@ -576,6 +608,7 @@ function render() {
     if (!state.questions.some(question => question.id === id && publishable(question))) selectedQuestions.delete(id);
   }
   renderTopics();
+  renderPipeline();
   renderPlan();
   renderEvents();
   renderQuestion();

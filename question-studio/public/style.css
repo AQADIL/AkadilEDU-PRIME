@@ -70,6 +70,17 @@
   .model-line { color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
   .totals { display: flex; flex-wrap: wrap; gap: 18px; border-bottom: 1px solid var(--line); padding: 21px 0; margin-bottom: 28px; color: var(--muted); font-size: 12px; }
   .totals strong { color: var(--text); font-size: 14px; font-weight: 600; margin-right: 5px; }
+  .pipeline { display: flex; flex-direction: column; flex-shrink: 0; min-height: 0; max-height: min(168px, 24dvh); padding: 10px 26px; border-bottom: 1px solid var(--line); }
+  .pipeline-heading { display: flex; flex-wrap: wrap; flex-shrink: 0; align-items: baseline; justify-content: space-between; gap: 4px 14px; margin-bottom: 5px; }
+  .pipeline-heading h2 { font-size: 12px; }
+  .pipeline-summary { color: var(--muted); font-size: 11px; }
+  .pipeline-jobs { list-style: none; padding: 0; margin: 0; min-height: 0; overflow-y: auto; }
+  .pipeline-job { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 2px 16px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+  .pipeline-job:last-child { border-bottom: 0; }
+  .pipeline-topic { min-width: 0; overflow-wrap: anywhere; font-size: 12px; }
+  .pipeline-details { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--muted); font-size: 11px; }
+  .pipeline-stage { color: var(--accent); }
+  .pipeline-job[data-stage="waiting"] .pipeline-stage { color: var(--warning); }
   .activity-heading { margin: 27px 0 18px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
   .events { display: flex; flex-direction: column; }
   .composer { padding: 18px 26px 22px; border-top: 1px solid var(--line); }
@@ -164,8 +175,8 @@
 }
 
 @layer responsive {
-  @media (min-width: 1600px) { .studio { grid-template-columns: 280px minmax(420px, 1fr) 480px; } .workspace-body, .composer { padding-left: 40px; padding-right: 40px; } }
-  @media (max-width: 1120px) { .studio { grid-template-columns: 220px minmax(320px, 1fr) 330px; } .workspace-header, .workspace-body, .composer { padding-left: 18px; padding-right: 18px; } }
+  @media (min-width: 1600px) { .studio { grid-template-columns: 280px minmax(420px, 1fr) 480px; } .workspace-body, .composer, .pipeline { padding-left: 40px; padding-right: 40px; } }
+  @media (max-width: 1120px) { .studio { grid-template-columns: 220px minmax(320px, 1fr) 330px; } .workspace-header, .workspace-body, .composer, .pipeline { padding-left: 18px; padding-right: 18px; } }
   @media (max-width: 940px) { .studio { grid-template-columns: minmax(340px, 1fr) minmax(320px, .85fr); } .sidebar { display: none; } .studio.topics-open .sidebar { display: flex; position: fixed; inset: 0 auto 0 0; width: min(320px, 85vw); z-index: 5; box-shadow: 12px 0 40px #0008; } .mobile-toggle { display: inline-flex; } }
   @media (max-width: 680px) { .studio { display: block; height: auto; overflow: visible; } .workspace { min-height: 100dvh; } .workspace-body { min-height: 280px; overflow: visible; } .workspace-header { flex-wrap: wrap; } .review { border-top: 1px solid var(--line); border-left: 0; min-height: 60dvh; } .review-body { overflow: visible; } .review-header { min-height: 60px; } .composer { padding: 18px; } .events { max-height: 340px; overflow-y: auto; } .action-row { flex-wrap: wrap; } .mode-row { align-items: stretch; flex-direction: column; gap: 10px; } .run-title { font-size: 23px; } .status { font-size: 10px; } .connection { max-width: 100%; } }
 }
