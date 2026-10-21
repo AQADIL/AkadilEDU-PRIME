@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { config, initializeConfig } from './config.js';
-import { event, importState, loadState, safeError, save, state } from './store.js';
+import { event, importState, loadState, restoreLocalState, safeError, save, state } from './store.js';
 import { runWorkerStep } from './worker.js';
 import { request } from './api.js';
 import { loadTopics, requestDatabase } from './database.js';
@@ -113,10 +113,14 @@ export function cloudTick() {
 }
 
 export function cloudStatus() {
-  return locked(true, () => ({ status: state.status, phase: state.phase, budget: state.budget, totals: state.totals,
-    tick: PropertiesService.getScriptProperties().getProperty('STUDIO_LAST_TICK'),
-    error: PropertiesService.getScriptProperties().getProperty('STUDIO_TICK_ERROR') || state.error,
-    triggers: ScriptApp.getProjectTriggers().filter(trigger => trigger.getHandlerFunction() === 'cloudTick').length }));
+  return locked(true, () => {
+    const status = { status: state.status, phase: state.phase, budget: state.budget, totals: state.totals,
+      capturedAt: Date.now(), tick: PropertiesService.getScriptProperties().getProperty('STUDIO_LAST_TICK'),
+      error: PropertiesService.getScriptProperties().getProperty('STUDIO_TICK_ERROR') || state.error,
+      triggers: ScriptApp.getProjectTriggers().filter(trigger => trigger.getHandlerFunction() === 'cloudTick').length };
+    requestDatabase(`questionStudioRuntime/${state.runId}`, 'put', status);
+    return status;
+  });
 }
 
 export function handoffToLocal() {
@@ -134,5 +138,31 @@ export function handoffToLocal() {
       runId: state.runId, destination: 'local', exportedAt: Date.now(), checksum: sha256(serialized), payload,
     });
     return { runId: state.runId, budget: state.budget, totals: state.totals, status: state.status };
+  });
+}
+
+export function acceptLocalHandoff() {
+  return locked(true, () => {
+    const properties = PropertiesService.getScriptProperties();
+    const migration = z.object({
+      runId: z.literal(state.runId), destination: z.literal('google-apps-script'),
+      exportedAt: z.number().int().positive(), checksum: z.string().regex(/^[a-f0-9]{64}$/), payload: z.string().min(1),
+    }).parse(requestDatabase(`questionStudioMigrations/${state.runId}`));
+    if (properties.getProperty('STUDIO_IMPORTED_CHECKSUM') === migration.checksum) {
+      return { status: state.status, budget: state.budget, totals: state.totals };
+    }
+    if (!localOwnsRun()) throw new Error('Stop cloud execution before importing local state');
+    if (Date.now() - migration.exportedAt > 86400000 || migration.exportedAt > Date.now() + 60000) {
+      throw new Error('Migration snapshot is not fresh');
+    }
+    const serialized = Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(migration.payload), 'application/x-gzip'))
+      .getDataAsString('UTF-8');
+    if (sha256(serialized) !== migration.checksum) throw new Error('Migration checksum mismatch');
+    restoreLocalState(JSON.parse(serialized) as unknown);
+    event('Актуальные задания, расходы и незавершённые запросы перенесены с ноутбука.', 'success');
+    save();
+    properties.setProperties({ STUDIO_EXECUTION_OWNER: 'google-apps-script', STUDIO_IMPORTED_CHECKSUM: migration.checksum });
+    properties.deleteProperty('STUDIO_TICK_ERROR');
+    return { status: state.status, budget: state.budget, totals: state.totals };
   });
 }

@@ -101,10 +101,10 @@ export function saveQuestionToDatabase(question: StoredQuestion): void {
     .passthrough().nullable().parse(requestDatabase(`questions/${question.id}`));
   if (existing && existing.generation?.runId !== question.generation.runId) throw new Error('Question ID belongs to another generation run');
   const translations = Object.fromEntries(languages.map(language => {
-    const { localImageUrl: _local, ...content } = question.translations[language];
-    return [language, content];
+    const { localImageUrl: _local, displayText, ...content } = question.translations[language];
+    return [language, { ...content, text: displayText ?? content.text }];
   }));
-  const content = { ...question.translations.kk, localImageUrl: null, translations,
+  const content = { ...translations.kk, localImageUrl: null, translations,
     topic: question.topic, difficulty: question.difficulty, correctOption: question.correctOption,
     status: question.status === 'published' ? 'published' : 'draft', schemaVersion: 2,
     diagram: question.diagram, validation: question.validation, generation: question.generation,

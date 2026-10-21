@@ -74,6 +74,33 @@ export function importState(value: unknown) {
   properties.setProperties({ STUDIO_STATE_SLOTS: JSON.stringify(slots), STUDIO_STATE_ACTIVE: '0', STUDIO_STATE_FOLDER: folder.getId() });
 }
 
+export function restoreLocalState(value: unknown) {
+  const incoming = validateState(value);
+  if (incoming.runId !== state.runId || incoming.status !== 'paused') throw new Error('Migration must contain the same paused run');
+  if (incoming.calls.some(call => call.status === 'uncertain')) throw new Error('Uncertain charges cannot be migrated');
+  if (incoming.budget.spent < state.budget.spent || incoming.budget.limit > state.budget.limit) {
+    throw new Error('Migration cannot reset spend or increase the budget');
+  }
+  const calls = new Map(incoming.calls.map(call => [call.id, call]));
+  for (const previous of state.calls) {
+    const current = calls.get(previous.id);
+    if (!current || current.kind !== previous.kind || current.model !== previous.model
+      || (previous.responseId && current.responseId !== previous.responseId)
+      || current.reserved !== previous.reserved || current.cost < previous.cost
+      || JSON.stringify(current.prices) !== JSON.stringify(previous.prices)
+      || (previous.status === 'settled' && (current.status !== 'settled' || current.cost !== previous.cost))) {
+      throw new Error('Migration would change or discard existing API accounting');
+    }
+  }
+  if (state.questions.some(previous => !incoming.questions.some(question => question.id === previous.id))) {
+    throw new Error('Migration would discard existing questions');
+  }
+  state = incoming;
+  state.budget.limit = Math.min(state.budget.limit, config.budget);
+  state.error = null;
+  save();
+}
+
 export function loadState() {
   const properties = PropertiesService.getScriptProperties();
   slots = z.array(z.string().min(1)).length(2).parse(JSON.parse(properties.getProperty('STUDIO_STATE_SLOTS') || 'null'));
