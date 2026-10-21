@@ -11,6 +11,8 @@ export default function Login({
   browserRequest,
   onStartBrowserLogin,
   onVerifyBrowserOtp,
+  stayLoggedIn,
+  onStayLoggedInChange,
 }) {
   const [otp, setOtp] = useState('');
   const [successOffsets, setSuccessOffsets] = useState(() => Array(otpLength).fill(0));
@@ -155,6 +157,11 @@ export default function Login({
               <>
                 <h2 id="login-action-title">Sign In</h2>
                 <p className="login-description">Receive a 4-digit code in Telegram.</p>
+                <label className="login-remember">
+                  <input type="checkbox" checked={stayLoggedIn} disabled={creating}
+                    onChange={(event) => onStayLoggedInChange(event.target.checked)} />
+                  <span>Stay logged in</span>
+                </label>
                 <button
                   type="button"
                   disabled={creating}

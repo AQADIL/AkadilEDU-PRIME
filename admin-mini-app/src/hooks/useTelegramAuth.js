@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  browserLocalPersistence,
   browserSessionPersistence,
   inMemoryPersistence,
   onAuthStateChanged,
@@ -10,17 +11,25 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { auth, db, functions, get, ref } from '../lib/firebase';
 
+class AdminAccessError extends Error {}
+const stayLoggedInKey = 'akadiledu.stayLoggedIn';
+
+function readStayLoggedIn() {
+  try { return window.localStorage.getItem(stayLoggedInKey) !== 'false'; }
+  catch { return true; }
+}
+
 function validVerifiedUser(user) {
   return user && Number.isSafeInteger(user.id) && user.id > 0;
 }
 
 async function loadAdminProfile(firebaseUser, verifiedUser = null) {
   if (!/^\d{1,16}$/.test(firebaseUser.uid)) {
-    throw new Error('Invalid authenticated identity.');
+    throw new AdminAccessError('Invalid authenticated identity.');
   }
   const id = Number(firebaseUser.uid);
   if (!Number.isSafeInteger(id) || id <= 0) {
-    throw new Error('Invalid authenticated identity.');
+    throw new AdminAccessError('Invalid authenticated identity.');
   }
 
   const [adminSnapshot, profileSnapshot] = await Promise.all([
@@ -28,7 +37,7 @@ async function loadAdminProfile(firebaseUser, verifiedUser = null) {
     get(ref(db, `users/${firebaseUser.uid}`)),
   ]);
   if (!adminSnapshot.exists()) {
-    throw new Error('Administrator access has been revoked.');
+    throw new AdminAccessError('Administrator access has been revoked.');
   }
   const profile = profileSnapshot.val() || {};
   return {
@@ -110,6 +119,7 @@ export function useTelegramAuth() {
   const [error, setError] = useState(null);
   const [verificationError, setVerificationError] = useState(null);
   const [browserRequest, setBrowserRequest] = useState(null);
+  const [stayLoggedIn, setStayLoggedIn] = useState(readStayLoggedIn);
   const telegramAuthentication = useRef(null);
   const browserCredentials = useRef(null);
   const verificationInFlight = useRef(false);
@@ -120,6 +130,7 @@ export function useTelegramAuth() {
     active.current = true;
     let disposed = false;
     let unsubscribe = null;
+    let authRevision = 0;
     const webApp = window.Telegram?.WebApp;
     const initData = webApp?.initData;
 
@@ -144,10 +155,11 @@ export function useTelegramAuth() {
         },
       );
     } else {
-      setPersistence(auth, browserSessionPersistence).then(() => {
+      setPersistence(auth, readStayLoggedIn() ? browserLocalPersistence : browserSessionPersistence).then(() => {
         if (disposed) return;
         unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
           if (disposed || browserAuthenticationInProgress.current) return;
+          const revision = ++authRevision;
           if (!firebaseUser) {
             setUser(null);
             setLoading(false);
@@ -155,16 +167,22 @@ export function useTelegramAuth() {
           }
           try {
             const profile = await loadAdminProfile(firebaseUser);
-            if (!disposed) {
+            if (!disposed && revision === authRevision) {
               setUser(profile);
               setError(null);
               setLoading(false);
             }
-          } catch {
-            await signOut(auth);
+          } catch (restoreError) {
+            if (disposed || revision !== authRevision) return;
+            const invalidSession = restoreError instanceof AdminAccessError || [
+              'PERMISSION_DENIED', 'database/permission-denied', 'auth/user-disabled',
+              'auth/user-token-expired', 'auth/invalid-user-token',
+            ].includes(restoreError?.code);
+            if (invalidSession) await signOut(auth).catch(() => undefined);
             if (!disposed) {
               setUser(null);
-              setError('Your browser session is no longer valid.');
+              setError(invalidSession ? 'Your browser session is no longer valid.'
+                : 'Could not verify your saved session. Check your connection and reload.');
               setLoading(false);
             }
           }
@@ -193,7 +211,7 @@ export function useTelegramAuth() {
     browserCredentials.current = null;
     try {
       await signOut(auth);
-      await setPersistence(auth, browserSessionPersistence);
+      await setPersistence(auth, stayLoggedIn ? browserLocalPersistence : browserSessionPersistence);
       const { verifier, challenge } = await createBrowserChallenge();
       const begin = httpsCallable(functions, 'beginBrowserAuth');
       const response = await begin({ challenge });
@@ -212,6 +230,7 @@ export function useTelegramAuth() {
         requestId: request.requestId,
         verifier,
         expiresAt: request.expiresAt,
+        stayLoggedIn,
       };
       setBrowserRequest({
         status: 'pending',
@@ -225,7 +244,7 @@ export function useTelegramAuth() {
         setError(browserErrorMessage(startError));
       }
     }
-  }, []);
+  }, [stayLoggedIn]);
 
   const verifyBrowserOtp = useCallback(async (otp) => {
     if (!/^\d{4}$/.test(otp) || verificationInFlight.current) return;
@@ -259,7 +278,7 @@ export function useTelegramAuth() {
       const profile = await authenticateWithToken(
         response.data.token,
         response.data.user,
-        browserSessionPersistence,
+        credentials.stayLoggedIn ? browserLocalPersistence : browserSessionPersistence,
       );
       if (!active.current) return;
       setBrowserRequest(current => current ? { ...current, status: 'success' } : current);
@@ -297,6 +316,22 @@ export function useTelegramAuth() {
     setError(null);
   }, []);
 
+  const logout = useCallback(async () => {
+    await signOut(auth);
+    browserCredentials.current = null;
+    setUser(null);
+    setBrowserRequest(null);
+    setVerificationError(null);
+    setError(null);
+  }, []);
+
+  const updateStayLoggedIn = useCallback((value) => {
+    if (typeof value !== 'boolean' || verificationInFlight.current) return;
+    setStayLoggedIn(value);
+    try { window.localStorage.setItem(stayLoggedInKey, String(value)); }
+    catch { return; }
+  }, []);
+
   return {
     user,
     loading,
@@ -306,5 +341,8 @@ export function useTelegramAuth() {
     startBrowserLogin,
     verifyBrowserOtp,
     cancelBrowserLogin,
+    logout,
+    stayLoggedIn,
+    updateStayLoggedIn,
   };
 }

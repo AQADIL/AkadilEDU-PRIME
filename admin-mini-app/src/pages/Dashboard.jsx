@@ -1,15 +1,25 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart3, Users, BrainCircuit, BookOpen, Calendar } from 'lucide-react';
+import { BarChart3, Users, BrainCircuit, BookOpen, Calendar, LogOut } from 'lucide-react';
 import { useTheme } from '../contexts/theme';
 import { db, ref, get } from '../lib/firebase';
 import { countQuestionTopics } from '../services/topics';
 
-function Dashboard() {
+function Dashboard({ onSignOut }) {
   const { currentTheme } = useTheme();
   const [stats, setStats] = useState({ totalQuestions: 0, totalTopics: 0, totalUsers: 0, totalCampaigns: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [signingOut, setSigningOut] = useState(false);
+  const [signOutError, setSignOutError] = useState('');
+
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    setSignOutError('');
+    try { await onSignOut(); }
+    catch { setSignOutError('Unable to sign out. Please try again.'); }
+    finally { setSigningOut(false); }
+  };
 
   useEffect(() => {
     const fetchStats = async () => {
@@ -55,14 +65,20 @@ function Dashboard() {
   return (
     <div className="min-h-screen animate-fade-in">
       <div className={`${currentTheme.card} backdrop-blur-xl border-b border-white/10`}>
-        <div className="max-w-7xl mx-auto px-4 py-4">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4 px-4 py-4">
           <h1 className={`text-2xl font-bold ${currentTheme.text}`}>
             Admin Dashboard
           </h1>
+          <button type="button" onClick={handleSignOut} disabled={signingOut}
+            className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-sm ${currentTheme.textSecondary} hover:bg-white/10 disabled:opacity-50`}>
+            <LogOut className="h-4 w-4" aria-hidden="true" />
+            {signingOut ? 'Signing out…' : 'Sign out'}
+          </button>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-6">
+        {signOutError && <div role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-red-200">{signOutError}</div>}
         {error && <div role="alert" className="mb-4 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-red-200">Statistics could not be loaded: {error}</div>}
         {loading ? (
           <div className="flex items-center justify-center py-12">

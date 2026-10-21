@@ -22,6 +22,9 @@ function AppContent() {
     startBrowserLogin,
     verifyBrowserOtp,
     cancelBrowserLogin,
+    logout,
+    stayLoggedIn,
+    updateStayLoggedIn,
   } = useTelegramAuth();
 
   if (loading) {
@@ -41,6 +44,8 @@ function AppContent() {
         onStartBrowserLogin={startBrowserLogin}
         onVerifyBrowserOtp={verifyBrowserOtp}
         onCancelBrowserLogin={cancelBrowserLogin}
+        stayLoggedIn={stayLoggedIn}
+        onStayLoggedInChange={updateStayLoggedIn}
       />
     );
   }
@@ -50,7 +55,7 @@ function AppContent() {
       <div className={`min-h-screen ${currentTheme.background}`}>
         <Suspense fallback={<div className={`p-6 ${currentTheme.text}`}>Loading page…</div>}>
           <Routes>
-            <Route path="/" element={<Dashboard />} />
+            <Route path="/" element={<Dashboard onSignOut={logout} />} />
             <Route path="/questions" element={<Questions />} />
             <Route path="/topics" element={<Topics />} />
             <Route path="/campaigns" element={<Campaigns />} />
