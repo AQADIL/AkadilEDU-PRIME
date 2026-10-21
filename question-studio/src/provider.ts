@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { config } from './config.js';
 import { state, save, event } from './store.js';
 import type { ApiCall, ModelPrices, ReferenceSource } from './schema.js';
-import { assertSettledCallWithinReservation, calculateUsageCost, usageSchema } from './schema.js';
+import { assertSettledCallWithinReservation, calculateUsageCost, exceededWebSearchLimit, usageSchema } from './schema.js';
 
 const responseSchema = z.object({
   id: z.string(),
@@ -221,11 +221,18 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       throw new RecoverableApiError(previous.id, previous.terminalReason!);
     }
     if (!call || previous) {
+      if (state.calls.some(item => item.status === 'uncertain' || item.status === 'reserved')) {
+        throw new Error('Uncertain API accounting must be reconciled before any new paid request');
+      }
       if (previous && ['server_error', 'rate_limit_exceeded', 'vector_store_timeout'].includes(previous.terminalReason!)) {
         await delay(Math.min(2000 * 2 ** (attemptNumber(previous) - 1), 30000));
       }
       if (shouldPause?.()) throw new RequestPausedError('Пауза запрошена до следующего API-запроса.');
       if (kind === 'research' && !config.webSearchEnabled) throw new Error('Web research is disabled');
+      const webSearchOverrun = state.calls.find(exceededWebSearchLimit);
+      if (kind === 'research' && webSearchOverrun) {
+        throw new RecoverableApiError(previous?.id ?? webSearchOverrun.id, 'web_search_disabled_after_overrun');
+      }
       const previousLimit = previous?.maxOutputTokens ?? config.maxOutputTokens;
       const maxOutputTokens = previous?.terminalReason === 'max_output_tokens'
         ? Math.min(config.retryMaxOutputTokens, Math.max(previousLimit + 1, previousLimit * 2))
@@ -318,6 +325,7 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       await save();
       throw new Error('OpenAI returned an unexpected service tier; its charge must be reconciled before continuing');
     }
+    const webSearchWasDisabled = state.calls.some(exceededWebSearchLimit);
     const web = webUsage(response);
     call.maxOutputTokens ??= response.max_output_tokens ?? config.maxOutputTokens;
     call.webSearchCalls = web.webSearchCalls;
@@ -340,6 +348,9 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       throw new Error('OpenAI returned no usage; the reservation is retained until accounting can be reconciled');
     }
     assertSettledCallWithinReservation(call);
+    if (!webSearchWasDisabled && exceededWebSearchLimit(call)) {
+      await event('OpenAI превысил число поисков, но полная стоимость покрыта резервом. Веб-поиск автоматически отключён; сохраняю полученный ответ и продолжаю генерацию.', 'warning');
+    }
     if (response.status === 'incomplete') {
       const reason = response.incomplete_details?.reason || 'incomplete_response';
       await terminalFailure(call, reason, reason === 'max_output_tokens');

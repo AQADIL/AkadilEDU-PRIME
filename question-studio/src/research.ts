@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { config } from './config.js';
-import { event, save } from './store.js';
+import { state, event, save } from './store.js';
 import { runStructured, sourceUrl, RecoverableApiError } from './provider.js';
 import type { ReferenceSource, Topic, TopicResearch } from './schema.js';
+import { exceededWebSearchLimit } from './schema.js';
 
 const researchSchema = z.strictObject({
   summary: z.string().max(1800),
@@ -30,7 +31,7 @@ export async function researchTopic(topic: Topic, shouldPause?: () => boolean): 
   if (!topic.eligible || !topic.id.startsWith('geometry_')) return undefined;
   if (topic.research) return topic.research;
   if (topic.researchUnavailable) return undefined;
-  if (!config.webSearchEnabled && !topic.researchCallId) return undefined;
+  if ((!config.webSearchEnabled || state.calls.some(exceededWebSearchLimit)) && !topic.researchCallId) return undefined;
   await event(`${topic.name}: проверяю источники и требования к чертежам.`, 'info', topic.id);
   const result = await runStructured('research', researchPrompt, {
     topic: { id: topic.id, name: topic.name, path: topic.path },

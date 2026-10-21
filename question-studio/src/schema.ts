@@ -176,10 +176,14 @@ export function assertSettledCallWithinReservation(call: ApiCall): void {
     throw new Error('Стоимость API-запроса превысила резерв. Новые запросы остановлены до сверки расходов.');
   }
   if (call.kind === 'research' && (!Number.isSafeInteger(call.webSearchCalls) || call.webSearchCalls! < 0
-    || !Number.isSafeInteger(call.webSearchMaxCalls) || call.webSearchMaxCalls! < 1
-    || call.webSearchCalls! > call.webSearchMaxCalls!)) {
-    throw new Error('Число платных поисков превысило резерв. Новые запросы остановлены до сверки расходов.');
+    || !Number.isSafeInteger(call.webSearchMaxCalls) || call.webSearchMaxCalls! < 1)) {
+    throw new Error('Не удалось подтвердить число платных поисков. Новые запросы остановлены до сверки расходов.');
   }
+}
+export function exceededWebSearchLimit(call: ApiCall): boolean {
+  return call.kind === 'research' && call.status === 'settled'
+    && Number.isSafeInteger(call.webSearchCalls) && Number.isSafeInteger(call.webSearchMaxCalls)
+    && call.webSearchCalls! > call.webSearchMaxCalls!;
 }
 export const usageSchema = z.object({
   input_tokens: tokenCount,
