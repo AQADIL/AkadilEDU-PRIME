@@ -12,9 +12,13 @@ For sqrt(f(x))=g(x), f(x)>=0 defines the radical domain; g(x)>=0 is an additiona
 Routine factorisation, cancellation and checking forbidden roots are medium, not hard by themselves.
 Use concise complete explanations without repeating the same derivation in multiple forms.
 Avoid repetitive templates and mere numeric substitutions; vary reasoning, representations, and common traps.
-Prefer ordinary Unicode mathematics everywhere: x², π/2, √x, ±, ≠, ≤, ≥. Use LaTeX ONLY inside statement text,
-only when complex layout genuinely requires it, with $...$ delimiters. NEVER LaTeX in options, explanation,
-hint, captions or diagram labels. Do not refer to a diagram, graph or table unless it is actually provided.
+In the statement, render fractions as stacked LaTeX fractions inside $...$ or $$...$$ delimiters.
+Also use delimited LaTeX for nested radicals, systems, stacked expressions and other mathematics whose
+plain-text layout would be difficult to read. These statement formulas are rendered into a PNG image.
+Keep simple powers, signs and short expressions as readable Unicode: x², √x, ±, ≠, ≤, ≥.
+Options, explanations and hints MUST ALWAYS be plain text with Unicode and ordinary letters, never
+LaTeX or images. In those fields write fractions using / with explicit parentheses to preserve meaning;
+explain complicated expressions in short readable steps. Never LaTeX in captions or diagram labels. Do not refer to a diagram, graph or table unless it is actually provided.
 For geometry, graphs and data visualisation: supply diagram whenever visual information helps or is required.
 diagram coordinates are exact Cartesian positions with positive y upwards. Points have unique IDs.
 Segments and polygon vertices reference those IDs. Circles and ellipse arcs reference a point for
@@ -73,7 +77,10 @@ of making the task artificially convoluted. If a duplicate/template was flagged,
 and construction within the topic, not merely coefficients. Do not copy any history question.
 Preserve correct parts and fix mistakes in every language. Use мүмкін мәндер жиыны (ММЖ) and анықталу облысы
 in Kazakh, not ОДЗ. Separate domain restrictions from additional sign conditions for equation solutions.
-Prefer plain Unicode math; LaTeX is allowed only in the statement when necessary, enclosed in $...$ or $$...$$.
+In the statement, use stacked LaTeX fractions and delimited LaTeX for complex layouts that are hard to
+read as plain text; enclose formulas in $...$ or $$...$$ so they become a statement image.
+Options, explanations and hints must always remain plain Unicode and ordinary letters, without LaTeX
+or images. Use / with explicit parentheses for fractions and short readable steps in these fields.
 Never use raw LaTeX commands or alternative delimiters. Keep diagrams separate
 from statement text, accurate, readable and language-neutral where possible. Do not invent source URLs.
 Output only the strict schema. Be concise but mathematically complete.`;
@@ -85,6 +92,9 @@ Return a review for every input question with its exact zero-based batch index a
 correctOption (0..3). Verify exactly one mathematically correct option, domains, units, roots,
 calculations, language equivalence kk/ru/en, native Kazakh mathematical terminology, explanations,
 useful hints, appropriate difficulty and correct leaf-topic classification.
+Check presentation: fractions and complex layouts in statements should use delimited LaTeX for image
+rendering. Options, explanations and hints must stay readable plain Unicode text without LaTeX or images.
+Check that parentheses in plain-text fractions preserve the intended numerator and denominator.
 Check diagram coordinates, incidence, distances/angles if claimed, scales, labels, charts and projections.
 Check ellipse arc centers, radii, signed sweeps and solid/dashed visibility; verify projected circular
 rims and hidden edges are coherent. Check that angle markers identify the smaller angle between the
