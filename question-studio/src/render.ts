@@ -90,7 +90,10 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
       if (height > 6000) throw new QuestionRenderError('Question image exceeds readable size');
       const filename = path.join(directory, `${question.id}-${language}.png`);
       const pixels = await page.locator('article').screenshot();
-      await sharp(pixels).png({ compressionLevel: 9, palette: true, colours: 64 }).toFile(filename);
+      await sharp(pixels)
+        .trim({ background: 'white', threshold: 10, lineArt: true })
+        .extend({ top: 24, bottom: 24, left: 24, right: 24, background: 'white' })
+        .png({ compressionLevel: 9, palette: true, colours: 64 }).toFile(filename);
       result[language] = filename;
       rendered.set(signature, filename);
       translation.localImageUrl = `/media/${path.basename(filename)}`;
