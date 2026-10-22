@@ -48,6 +48,10 @@ function validateState(value: unknown): StudioState {
     if (call.kind === 'research' && (!call.prices.webSearch || !call.webSearchMaxCalls)) throw new Error('Research accounting is incomplete');
     if (call.status === 'pending' && !call.responseId) throw new Error('Pending response identifier is missing');
     if (call.status === 'reserved') call.status = 'uncertain';
+    if (call.quarantined && (call.status !== 'uncertain'
+      || (call.responseId && !call.terminalReason?.startsWith('usage_unavailable:')))) {
+      throw new Error('Invalid quarantined API request');
+    }
   }
   const spent = saved.calls.reduce((sum, call) => sum + call.cost, 0);
   const reserved = saved.calls.filter(call => call.status !== 'settled').reduce((sum, call) => sum + call.reserved, 0);
@@ -63,7 +67,7 @@ export function importState(value: unknown) {
   state = validateState(value);
   if (state.jobs?.length) throw new Error('Finish local parallel jobs before migrating to the serial cloud worker');
   if (state.status === 'running') throw new Error('Pause the local worker before migration');
-  if (state.calls.some(call => call.status === 'uncertain')) throw new Error('Reconcile uncertain API calls before migration');
+  if (state.calls.some(call => call.status === 'uncertain' && !call.quarantined)) throw new Error('Reconcile uncertain API calls before migration');
   state.budget.limit = Math.min(state.budget.limit, config.budget);
   state.status = 'paused';
   const folder = DriveApp.createFolder('AkadilEDU Question Studio — state');
@@ -78,7 +82,7 @@ export function importState(value: unknown) {
 export function restoreLocalState(value: unknown) {
   const incoming = validateState(value);
   if (incoming.runId !== state.runId || incoming.status !== 'paused') throw new Error('Migration must contain the same paused run');
-  if (incoming.calls.some(call => call.status === 'uncertain')) throw new Error('Uncertain charges cannot be migrated');
+  if (incoming.calls.some(call => call.status === 'uncertain' && !call.quarantined)) throw new Error('Uncertain charges cannot be migrated');
   if (incoming.budget.spent < state.budget.spent || incoming.budget.limit > state.budget.limit) {
     throw new Error('Migration cannot reset spend or increase the budget');
   }

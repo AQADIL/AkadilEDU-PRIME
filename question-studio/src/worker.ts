@@ -3,7 +3,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { config } from './config.js';
 import { state, event, save, safeError } from './store.js';
-import { runStructured, BudgetError, RecoverableApiError, RequestPausedError, ResponsePollingError, UnidentifiedApiOutcomeError } from './provider.js';
+import { runStructured, reconcileUncertainResponses, BudgetError, RecoverableApiError, RequestPausedError, ResponsePollingError, UnidentifiedApiOutcomeError } from './provider.js';
 import { generationPrompt, reviewPrompt } from './prompts.js';
 import { generationSchema, reviewSchema, languages, difficulties, restoreGeneratedQuestion, type Difficulty, type StoredQuestion, type Topic, type GenerationJob } from './schema.js';
 import { runParallelPipeline } from './pipeline.js';
@@ -194,7 +194,8 @@ async function serialLoop() {
       try {
         let recovered = 0;
         for (const call of state.calls) {
-          if (call.status !== 'uncertain' || call.responseId) continue;
+          if (call.status !== 'uncertain'
+            || (call.responseId && !(call.quarantined && call.terminalReason?.startsWith('usage_unavailable:')))) continue;
           if (!call.quarantined) { call.quarantined = true; recovered++; }
           if (state.generationCallId === call.id) { state.generationCallId = null; recovered++; }
           if (state.pendingBatch?.reviewCallId === call.id) { delete state.pendingBatch.reviewCallId; recovered++; }
@@ -204,7 +205,11 @@ async function serialLoop() {
           }
           for (const question of state.questions) {
             if (question.repair?.generationCallId === call.id) { delete question.repair.generationCallId; recovered++; }
-            if (question.repair?.reviewCallId === call.id) { delete question.repair.reviewCallId; recovered++; }
+            if (question.repair?.reviewCallId === call.id) {
+              delete question.repair.reviewCallId;
+              delete question.repair.originalReviewRequired;
+              recovered++;
+            }
           }
         }
         if (recovered) await event('Сохранены неопределённые расходы; этап продолжится без повторной отправки этих запросов.', 'warning');
@@ -244,7 +249,7 @@ async function serialLoop() {
       } catch (error) {
         if (error instanceof RequestPausedError) break;
         if (error instanceof UnidentifiedApiOutcomeError) {
-          await event('Связь оборвалась до получения ID ответа. Весь резерв сохранён; продолжаю этап новым запросом после паузы.', 'warning');
+          await event('API не подтвердил расход запроса. Весь резерв сохранён; продолжаю этап отдельным запросом после паузы.', 'warning');
           const until = Date.now() + config.recoveryBackoffMs;
           while (!pauseRequested && Date.now() < until) await delay(Math.min(1000, until - Date.now()));
           continue;
@@ -295,9 +300,12 @@ export function startWorker() {
   if (config.executionOwner === 'google-apps-script') throw new Error('This run belongs to the cloud worker; local generation is disabled');
   if (running) throw new Error('Генерация уже выполняется');
   pauseRequested = false;
-  running = (state.mode === 'generate'
-    ? runParallelPipeline({ generate: generateBatch, review: processBatch }, () => pauseRequested)
-    : serialLoop()).finally(async () => { try { await save(); } finally { running = null; } });
+  running = (async () => {
+    await reconcileUncertainResponses(() => pauseRequested);
+    return state.mode === 'generate'
+      ? runParallelPipeline({ generate: generateBatch, review: processBatch }, () => pauseRequested)
+      : serialLoop();
+  })().finally(async () => { try { await save(); } finally { running = null; } });
   running.catch(error => {
     state.status = 'error'; state.error = safeError(error);
     process.stderr.write(`${state.error}\n`);

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { config } from './config.js';
 import { state, event, save, safeError } from './store.js';
-import { runStructured, BudgetError, RecoverableApiError, RequestPausedError, CloudYieldError, sha256 } from './provider.js';
+import { runStructured, BudgetError, RecoverableApiError, RequestPausedError, UnidentifiedApiOutcomeError, CloudYieldError, sha256 } from './provider.js';
 import { generationPrompt, reviewPrompt } from '../src/prompts.js';
 import { generationSchema, reviewSchema, languages, difficulties, restoreGeneratedQuestion, type Difficulty, type StoredQuestion, type Topic } from '../src/schema.js';
 import { saveQuestionToDatabase, uploadImage } from './database.js';
@@ -185,9 +185,37 @@ export function isTemporaryGoogleFailure(error: unknown): boolean {
     || /^(?:Exceeded maximum execution time|Limit exceeded: (?:Script runtime|URL Fetch calls|Service calls|Daily quota))/i.test(message);
 }
 
+function recoverQuarantinedCall(callId: string): boolean {
+  const call = state.calls.find(item => item.id === callId);
+  if (!call || call.status !== 'uncertain' || !call.quarantined
+    || (call.responseId && !call.terminalReason?.startsWith('usage_unavailable:'))) return false;
+  let changed = false;
+  if (state.generationCallId === call.id) { state.generationCallId = null; changed = true; }
+  if (state.pendingBatch?.reviewCallId === call.id) { delete state.pendingBatch.reviewCallId; changed = true; }
+  for (const question of state.questions) {
+    if (question.repair?.generationCallId === call.id) { delete question.repair.generationCallId; changed = true; }
+    if (question.repair?.reviewCallId === call.id) {
+      delete question.repair.reviewCallId;
+      delete question.repair.originalReviewRequired;
+      changed = true;
+    }
+  }
+  if (call.kind === 'research') {
+    const topic = state.topics.find(item => item.researchCallId === call.id);
+    if (topic && !topic.researchUnavailable) { topic.researchUnavailable = true; changed = true; }
+  }
+  return changed;
+}
+
 export function runWorkerStep() {
   if (state.status !== 'running') return;
+  const properties = PropertiesService.getScriptProperties();
+  const recoveryKey = 'STUDIO_REQUEST_RECOVERY_AT';
+  const recoveryAt = Number(properties.getProperty(recoveryKey) ?? 0);
+  if (Number.isFinite(recoveryAt) && recoveryAt > Date.now()) return;
+  properties.deleteProperty(recoveryKey);
   try {
+    for (const call of state.calls) recoverQuarantinedCall(call.id);
     if (state.pendingBatch) { processBatch(); return; }
     if (state.generationCallId) {
       const active = state.topics.find(topic => topic.id === state.activeTopicId);
@@ -212,8 +240,14 @@ export function runWorkerStep() {
     state.activeTopicId = topic.id;
     generateBatch(topic);
   } catch (error) {
+    if (error instanceof UnidentifiedApiOutcomeError) {
+      recoverQuarantinedCall(error.callId);
+      properties.setProperty(recoveryKey, String(Date.now() + config.recoveryBackoffMs));
+      event('Стоимость ответа не подтверждена. Полный резерв сохранён; отдельная попытка продолжится автоматически в пределах общего бюджета.', 'warning');
+      return;
+    }
     if (error instanceof CloudYieldError) return;
-    if (isTemporaryGoogleFailure(error) && !state.calls.some(call => call.status === 'uncertain' || call.status === 'reserved')) return;
+    if (isTemporaryGoogleFailure(error) && !state.calls.some(call => (call.status === 'uncertain' && !call.quarantined) || call.status === 'reserved')) return;
     if (error instanceof RequestPausedError) { state.status = 'paused'; return; }
     try {
       if (!(error instanceof RecoverableApiError || error instanceof BatchContentError) || state.mode === 'parse') throw error;

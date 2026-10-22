@@ -38,7 +38,8 @@ function planDifficulty(count: number): Difficulty[] {
 
 function recoverUnidentifiedCall(callId: string): boolean {
   const call = state.calls.find(item => item.id === callId);
-  if (!call || call.status !== 'uncertain' || call.responseId) return false;
+  if (!call || call.status !== 'uncertain'
+    || (call.responseId && !(call.quarantined && call.terminalReason?.startsWith('usage_unavailable:')))) return false;
   let changed = !call.quarantined;
   call.quarantined = true;
   for (const job of state.jobs ?? []) {
@@ -47,7 +48,11 @@ function recoverUnidentifiedCall(callId: string): boolean {
   }
   for (const question of state.questions) {
     if (question.repair?.generationCallId === call.id) { delete question.repair.generationCallId; changed = true; }
-    if (question.repair?.reviewCallId === call.id) { delete question.repair.reviewCallId; changed = true; }
+    if (question.repair?.reviewCallId === call.id) {
+      delete question.repair.reviewCallId;
+      delete question.repair.originalReviewRequired;
+      changed = true;
+    }
   }
   if (call.kind === 'research') {
     const topic = state.topics.find(item => item.researchCallId === call.id);

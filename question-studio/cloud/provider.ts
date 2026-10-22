@@ -36,6 +36,11 @@ export function sha256(value: string): string {
 }
 export class BudgetError extends Error {}
 export class RequestPausedError extends Error {}
+export class UnidentifiedApiOutcomeError extends Error {
+  constructor(readonly callId: string) {
+    super('Стоимость API-запроса не подтверждена. Полный резерв сохранён.');
+  }
+}
 export class RecoverableApiError extends Error {
   constructor(readonly callId: string, readonly reason: string) {
     super(`Запрос ${callId}: ${reason}. Задание отложено после ограниченного числа попыток.`);
@@ -211,7 +216,8 @@ export function runStructured<T>(kind: ApiCall['kind'], instructions: string, in
       delete call.result;
       terminalFailure(call, 'invalid_structured_result', true);
     }
-    if (call?.status === 'uncertain' || (call && !call.responseId)) {
+    if (call?.status === 'uncertain' && call.quarantined) throw new UnidentifiedApiOutcomeError(call.id);
+    if (call && !call.responseId) {
       throw new Error('Неопределённый результат API-запроса. Резерв сохранён; повторная оплата автоматически запрещена.');
     }
     const previous = call?.terminalReason ? call : undefined;
@@ -221,7 +227,7 @@ export function runStructured<T>(kind: ApiCall['kind'], instructions: string, in
       throw new RecoverableApiError(previous.id, previous.terminalReason!);
     }
     if (!call || previous) {
-      if (state.calls.some(item => item.status === 'uncertain' || item.status === 'reserved')) {
+      if (state.calls.some(item => (item.status === 'uncertain' && !item.quarantined) || item.status === 'reserved')) {
         throw new Error('Uncertain API accounting must be reconciled before any new paid request');
       }
       if (shouldPause?.()) throw new RequestPausedError('Пауза запрошена до следующего API-запроса.');
@@ -320,9 +326,15 @@ export function runStructured<T>(kind: ApiCall['kind'], instructions: string, in
       call.status = 'settled';
     } else if (call.status !== 'settled') {
       call.status = 'uncertain';
+      if (['failed', 'cancelled', 'incomplete'].includes(response.status)) {
+        call.quarantined = true;
+        call.terminalReason = `usage_unavailable:${response.status}:${response.error?.code ?? response.incomplete_details?.reason ?? 'unknown'}`;
+        call.terminalRetryable = false;
+      }
     }
     save();
     if (call.status !== 'settled') {
+      if (call.quarantined) throw new UnidentifiedApiOutcomeError(call.id);
       throw new Error('OpenAI returned no usage; the reservation is retained until accounting can be reconciled');
     }
     assertSettledCallWithinReservation(call);

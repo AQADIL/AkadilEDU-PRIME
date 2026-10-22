@@ -35,7 +35,7 @@ export class BudgetError extends Error {}
 export class RequestPausedError extends Error {}
 export class UnidentifiedApiOutcomeError extends Error {
   constructor(readonly callId: string) {
-    super('Результат запроса неизвестен. Полный резерв сохранён; этот запрос не повторяется.');
+    super('Расход запроса не подтверждён. Полный резерв сохранён; этот запрос не повторяется.');
   }
 }
 export class ResponsePollingError extends Error {
@@ -192,6 +192,41 @@ async function terminalFailure(call: ApiCall, reason: string, retryable: boolean
   call.terminalReason = reason;
   call.terminalRetryable = retryable;
   await event(`${callLabel(call.kind)}: ответ не принят (${reason}); учтено $${call.cost.toFixed(4)}.`, 'warning');
+}
+
+function quarantineMissingUsage(call: ApiCall, response: z.infer<typeof responseSchema>) {
+  call.status = 'uncertain';
+  call.quarantined = true;
+  call.terminalReason = `usage_unavailable:${response.error?.code ?? response.status}`;
+  call.terminalRetryable = true;
+}
+
+export async function reconcileUncertainResponses(shouldPause: () => boolean): Promise<void> {
+  for (const call of state.calls.filter(item => item.status === 'uncertain' && item.responseId && !item.quarantined)) {
+    while (!shouldPause()) {
+      let response: z.infer<typeof responseSchema>;
+      try { response = await request(`/responses/${encodeURIComponent(call.responseId!)}`); }
+      catch (error) {
+        if (error instanceof HttpError && error.status !== 408 && error.status !== 429 && error.status < 500) throw error;
+        await event('Проверяю расход сохранённого ответа после сбоя связи. Нового платного запроса нет.', 'warning');
+        await delay(Math.max(config.recoveryBackoffMs, error instanceof HttpError ? error.retryAfterMs ?? 0 : 0));
+        continue;
+      }
+      if (response.id !== call.responseId || (response.service_tier && response.service_tier !== call.serviceTier)) {
+        throw new Error('Параметры сохранённого ответа не совпадают с журналом; платные запросы остановлены.');
+      }
+      if (response.usage) {
+        const web = webUsage(response);
+        Object.assign(call, calculateUsageCost(response.usage, call.prices, web.webSearchCalls), web);
+        call.status = 'settled';
+        assertSettledCallWithinReservation(call);
+      } else if (response.status === 'queued' || response.status === 'in_progress') call.status = 'pending';
+      else quarantineMissingUsage(call, response);
+      await save();
+      if (call.quarantined) await event('API завершил запрос без данных о расходе. Полный резерв сохранён; остальные задания продолжаются в общем бюджете.', 'warning');
+      break;
+    }
+  }
 }
 
 export async function runStructured<T>(kind: ApiCall['kind'], instructions: string, input: object,
@@ -407,11 +442,11 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       }
       call.status = 'settled';
     } else if (call.status !== 'settled') {
-      call.status = 'uncertain';
+      quarantineMissingUsage(call, response);
     }
     await save();
     if (call.status !== 'settled') {
-      throw new Error('OpenAI returned no usage; the reservation is retained until accounting can be reconciled');
+      throw new UnidentifiedApiOutcomeError(call.id);
     }
     assertSettledCallWithinReservation(call);
     if (!webSearchWasDisabled && exceededWebSearchLimit(call)) {
