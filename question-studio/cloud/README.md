@@ -9,14 +9,14 @@ The cloud worker runs on Google Apps Script time triggers without a laptop or a 
 - Drive keeps two compressed state snapshots. A pointer changes only after writing the next snapshot. ScriptLock excludes simultaneous UI and timer mutations.
 - Transient API, Firebase and Google service errors defer work. Bounded content failures proceed to repair or the next topic. Known terminal API failures without usage retain their full reservation in quarantine and defer a separately reserved replacement. Authentication failures, corrupted accounting and unquarantined uncertain charges fail closed.
 - A prepaid six-minute runtime reservation survives an interrupted invocation. Completed invocations replace it with elapsed time. When the configured daily allowance is exhausted, work resumes in the next 24-hour window.
-- Luna authors and repairs; Sol independently solves and reviews. Models, prices, limits and endpoints come from Script Properties populated from the deployment environment.
+- Authoring, repair and independent review models, prices, limits and endpoints come from Script Properties populated from the deployment environment.
 - Geometry and statement formulas are drawn privately with Slides, cropped to their content with a 24-pixel margin, and uploaded to Firebase Storage. Identical formulas and diagrams share one image across languages; translated instructions remain separate when possible. Answers, hints and explanations always remain Unicode text. Unsupported LaTeX goes through repair instead of being published as raw commands.
 - The web app is deployed with `MYSELF` access and checks the exact configured owner for every operation. No public API or shared bearer link is enabled.
 
 ## Deployment
 
 1. Configure the cloud fields from `.env.example` in the ignored `.env`. `STUDIO_CLOUD_OAUTH_SCOPES` must include Drive, Slides, external requests, installable triggers and user email. Configure service endpoints using the official Google API URLs.
-2. Pause the local worker and wait until its status is paused. Reconcile any uncertain call first. Preserve `.data/state.json` as a migration backup.
+2. Pause the local worker and wait until its status is paused. Reconcile any uncertain call first. Stop the process and preserve `.data/state.sqlite` with any adjacent WAL/SHM files as a migration backup. Legacy runs without this database use `.data/state.json`. Bootstrap reads the database when present and refuses an incomplete import.
 3. Authorize the official `@google/clasp` CLI, create a private script project, and configure the ignored `.clasp.json` with that script ID and `rootDir: .cloud-build`.
 4. Run `npm run check`, `npm run cloud:check`, then `npm run cloud:build -- --bootstrap` and `npx clasp push --force`.
 5. In the Apps Script editor run `bootstrapCloud` once. The owner must authorize the displayed Google scopes. This imports secrets into Script Properties and state into private Drive files. It deliberately refuses to replace an existing ledger.

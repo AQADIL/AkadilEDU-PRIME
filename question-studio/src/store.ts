@@ -1,11 +1,11 @@
-import { mkdir, open, readFile, rename, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
 import { config } from './config.js';
 import type { StudioState } from './schema.js';
 import { generationJobSchema } from './schema.js';
 import { budgetCheckpointSchema, budgetUsage } from './budget.js';
+import { StatePersistence } from './statePersistence.js';
 
 const stateFile = path.join(config.dataDir, 'state.json');
 const lockFile = path.join(config.dataDir, 'studio.lock');
@@ -22,7 +22,8 @@ try {
 const lock = await open(lockFile, 'wx');
 await lock.writeFile(JSON.stringify({ pid: process.pid }));
 await lock.close();
-export async function releaseLock() { await unlink(lockFile).catch(() => undefined); }
+const persistence = new StatePersistence(path.join(config.dataDir, 'state.sqlite'), config.stateWriteTimeoutMs);
+export async function releaseLock() { persistence.close(); await unlink(lockFile).catch(() => undefined); }
 
 function initialState(): StudioState {
   return {
@@ -37,12 +38,19 @@ function initialState(): StudioState {
     jobs: [],
   };
 }
-export const state: StudioState = await readFile(stateFile, 'utf8').then(value => {
-  const saved = JSON.parse(value) as StudioState;
+async function loadState(): Promise<StudioState> {
+  const stored = persistence.load();
+  if (stored) return stored;
+  try { return JSON.parse(await readFile(stateFile, 'utf8')) as StudioState; }
+  catch (error) {
+    if (error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT') return initialState();
+    throw error;
+  }
+}
+export const state: StudioState = await loadState().then(saved => {
   if (saved.version !== 1 || !Array.isArray(saved.calls) || !Array.isArray(saved.questions)) throw new Error('Invalid studio state');
   saved.jobs = generationJobSchema.array().parse(saved.jobs ?? []);
-  if (new Set(saved.jobs.map(job => job.id)).size !== saved.jobs.length
-    || new Set(saved.jobs.map(job => job.topicId)).size !== saved.jobs.length) throw new Error('Duplicate generation jobs');
+  if (new Set(saved.jobs.map(job => job.id)).size !== saved.jobs.length) throw new Error('Duplicate generation jobs');
   for (const job of saved.jobs) {
     if (!saved.topics.some(topic => topic.id === job.topicId && topic.eligible)) throw new Error('Generation job has an invalid topic');
     for (const [id, kind] of [[job.generationCallId, 'generation'], [job.batch?.generationCallId, 'generation'],
@@ -109,14 +117,12 @@ export const state: StudioState = await readFile(stateFile, 'utf8').then(value =
   }
   for (const call of saved.calls) if (call.status === 'reserved') call.status = 'uncertain';
   return saved;
-}).catch(error => {
-  if (error && 'code' in error && error.code === 'ENOENT') return initialState();
-  throw error;
 });
 
 let writes = Promise.resolve();
 let requestedRevision = 0;
 let persistedRevision = 0;
+export function stateRevision(): number { return requestedRevision; }
 export function save(): Promise<void> {
   const usage = budgetUsage(state.calls, state.budget);
   state.budget.spent = usage.spent;
@@ -152,25 +158,8 @@ export function save(): Promise<void> {
   const operation = writes.then(async () => {
     if (persistedRevision >= revision) return;
     const snapshotRevision = requestedRevision;
-    const data = JSON.stringify(state);
-    const temporary = `${stateFile}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temporary, data, { mode: 0o600 });
-      const deadline = Date.now() + config.stateWriteTimeoutMs;
-      while (true) {
-        try {
-          await rename(temporary, stateFile);
-          persistedRevision = snapshotRevision;
-          break;
-        } catch (error) {
-          const code = error instanceof Error && 'code' in error ? error.code : null;
-          if (!['EPERM', 'EACCES', 'EBUSY'].includes(String(code)) || Date.now() >= deadline) throw error;
-          await delay(Math.max(1, Math.min(100, deadline - Date.now())));
-        }
-      }
-    } finally {
-      await unlink(temporary).catch(() => undefined);
-    }
+    persistence.save(state);
+    persistedRevision = snapshotRevision;
   });
   writes = operation.catch(() => undefined);
   return operation;

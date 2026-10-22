@@ -5,7 +5,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 import { z } from 'zod';
 import { config, studioRoot } from './config.js';
-import { state, event, save, safeError, releaseLock } from './store.js';
+import { state, event, save, safeError, releaseLock, stateRevision } from './store.js';
 import { loadTopics } from './database.js';
 import { startWorker, pauseWorker, waitForWorker, publishQuestions, rerenderQuestions, startSchema } from './worker.js';
 import { closeRenderer } from './render.js';
@@ -17,6 +17,8 @@ if (config.executionOwner === 'google-apps-script') {
   throw new Error('Generation has migrated to Google Apps Script. Pause its trigger and restore the authoritative cloud state before enabling local execution.');
 }
 const csrfToken = randomBytes(32).toString('hex');
+const stateSession = randomBytes(12).toString('hex');
+let stateCache: { revision: number; body: string } | undefined;
 let mutating = false;
 const contentTypes: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
@@ -54,7 +56,14 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
     json(response, 200, { csrfToken }); return;
   }
   if (request.method === 'GET' && url.pathname === '/api/state') {
-    json(response, 200, publicState(state, config)); return;
+    const revision = stateRevision();
+    const etag = `"${stateSession}:${revision}"`;
+    response.setHeader('ETag', etag);
+    response.setHeader('Cache-Control', 'private, no-cache');
+    if (request.headers['if-none-match'] === etag) { response.writeHead(304); response.end(); return; }
+    if (stateCache?.revision !== revision) stateCache = { revision, body: JSON.stringify(publicState(state, config)) };
+    response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    response.end(stateCache.body); return;
   }
   if (request.method === 'POST' && url.pathname.startsWith('/api/')) {
     const token = request.headers['x-studio-token'];

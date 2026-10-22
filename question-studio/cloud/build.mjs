@@ -2,6 +2,8 @@ import { build } from 'esbuild';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { config as loadEnv } from 'dotenv';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -43,7 +45,20 @@ await writeFile(path.join(output, 'appsscript.json'), JSON.stringify({
 }, null, 2));
 
 if (process.argv.includes('--bootstrap')) {
-  const snapshot = JSON.parse(await readFile(path.resolve(root, required('STUDIO_DATA_DIR'), 'state.json'), 'utf8'));
+  const directory = path.resolve(root, required('STUDIO_DATA_DIR'));
+  let snapshot;
+  if (existsSync(path.join(directory, 'state.sqlite'))) {
+    const database = new DatabaseSync(path.join(directory, 'state.sqlite'), { readOnly: true });
+    try {
+      if (database.prepare('PRAGMA user_version').get().user_version !== 1) throw new Error('Unsupported state database version');
+      const rows = database.prepare('SELECT * FROM studio_records ORDER BY section, position').all();
+      if (!rows.length) throw new Error('Local state migration has not completed');
+      snapshot = Object.fromEntries(rows.filter(row => row.section === 'meta').map(row => [row.id, JSON.parse(row.payload)]));
+      for (const section of ['questions', 'calls', 'topics', 'events']) {
+        snapshot[section] = rows.filter(row => row.section === section).map(row => JSON.parse(row.payload));
+      }
+    } finally { database.close(); }
+  } else snapshot = JSON.parse(await readFile(path.join(directory, 'state.json'), 'utf8'));
   if (snapshot.status === 'running') throw new Error('Pause the local worker before preparing migration');
   if (snapshot.calls.some(call => ['reserved', 'uncertain'].includes(call.status))) throw new Error('Reconcile uncertain calls first');
   const keys = Object.keys(process.env).filter(key => /^(STUDIO_|OPENAI_|FIREBASE_|GOOGLE_)/.test(key)

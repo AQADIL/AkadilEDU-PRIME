@@ -11,6 +11,7 @@ const selectedQuestions = new Set();
 const controllers = new Set();
 const signatures = {};
 let state = null;
+let stateEtag = null;
 let csrfToken = null;
 let initialized = false;
 let pending = false;
@@ -711,10 +712,13 @@ async function request(path, options = {}) {
   controllers.add(controller);
   const timeout = setTimeout(() => controller.abort(), 20000);
   try {
-    const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options, signal: controller.signal });
+    const response = await fetch(path, { credentials: 'same-origin', cache: 'no-store', ...options,
+      headers: { ...options.headers, ...(path === '/api/state' && stateEtag ? { 'If-None-Match': stateEtag } : {}) }, signal: controller.signal });
+    if (response.status === 304 && path === '/api/state' && state) return state;
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(body?.error || (response.status === 403 ? t('unauthorized') : `${t('requestFailed')} (${response.status})`));
     if (!body || typeof body !== 'object') throw new Error(t('invalidResponse'));
+    if (path === '/api/state') stateEtag = response.headers.get('etag');
     return body;
   } finally {
     clearTimeout(timeout);
@@ -731,6 +735,7 @@ function validState(value) {
 async function refreshState() {
   const value = await request('/api/state');
   if (!validState(value)) throw new Error(t('invalidResponse'));
+  if (value === state && online) return;
   const previousError = state?.error || state?.cloudError;
   state = value;
   if (!initialized) {

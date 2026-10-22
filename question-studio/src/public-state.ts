@@ -1,4 +1,4 @@
-import type { ApiCall, ModelPrices, StudioState } from './schema.js';
+import type { ApiCall, ModelPrices, StoredQuestion, StudioState } from './schema.js';
 import { budgetUsage } from './budget.js';
 
 export interface PublicStateConfig {
@@ -14,6 +14,18 @@ export interface PublicStateConfig {
 export function publicState(state: StudioState, config: PublicStateConfig) {
   const callsById = new Map(state.calls.map(call => [call.id, call]));
   const callsByResponse = new Map(state.calls.filter(call => call.responseId).map(call => [call.responseId!, call]));
+  const questionsByResponse = new Map<string, StoredQuestion[]>();
+  for (const question of state.questions) {
+    const references = new Set([question.generation.responseId,
+      ...(question.repair?.history.map(entry => entry.generationResponseId).filter((id): id is string => Boolean(id)) ?? [])]);
+    for (const responseId of references) {
+      const questions = questionsByResponse.get(responseId) ?? [];
+      questions.push(question);
+      questionsByResponse.set(responseId, questions);
+    }
+  }
+  const activeCalls = new Set([state.pendingBatch?.generationCallId, state.generationCallId,
+    ...(state.jobs ?? []).flatMap(job => [job.generationCallId, job.batch?.generationCallId])]);
   const sampledCalls = new Map<string, number>();
   let acceptedInSample = 0;
   let sampledBatches = 0;
@@ -38,10 +50,8 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
     && call.status === 'settled' && !call.retryCallId)) {
     const chain = lineage(generation);
     if (!chain) { incompleteAccounting = true; continue; }
-    if (chain.some(call => call.id === state.pendingBatch?.generationCallId || call.id === state.generationCallId
-      || state.jobs?.some(job => job.generationCallId === call.id || job.batch?.generationCallId === call.id))) continue;
-    const questions = generation.responseId ? state.questions.filter(question => question.generation.responseId === generation.responseId
-      || question.repair?.history.some(entry => entry.generationResponseId === generation.responseId)) : [];
+    if (chain.some(call => activeCalls.has(call.id))) continue;
+    const questions = generation.responseId ? questionsByResponse.get(generation.responseId) ?? [] : [];
     if (questions.some(question => question.repair?.status === 'pending' || question.repair?.status === 'running')) continue;
     if (questions.some(question => question.generation.reviewModel !== config.reviewModel)) continue;
     if (!questions.length && !generation.terminalReason) { incompleteAccounting = true; continue; }
@@ -96,6 +106,9 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
   const visibleJobs = state.activeTopicId ? (state.jobs ?? []).filter(job => job.topicId === state.activeTopicId) : state.jobs ?? [];
   return {
     ...state, calls: undefined, sourceText: undefined, pendingBatch: undefined, generationCallId: undefined, jobs: undefined,
+    questions: state.questions.map(question => question.repair ? { ...question, repair: {
+      status: question.repair.status, attempts: question.repair.attempts, history: question.repair.history,
+    } } : question),
     topics: state.topics.map(topic => topic.progress ? { ...topic, progress: { ...topic.progress, audit: undefined } } : topic),
     budget: { ...state.budget, checkpoint: undefined,
       ...(state.budget.checkpoint ? { allowance: {
