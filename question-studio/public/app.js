@@ -435,7 +435,18 @@ function renderQuestion() {
   questionIndex = Math.max(0, Math.min(questionIndex, questions.length - 1));
   const question = questions[questionIndex];
   currentQuestionId = question?.id ?? null;
-  questionCount.textContent = number.format(state?.questions.length ?? 0);
+  questionCount.textContent = t('publishedCount', { count: number.format(state?.totals.published ?? 0) });
+  questionCount.title = t('questionCountDetails', {
+    total: number.format(state?.questions.length ?? 0),
+    rejected: number.format(state?.totals.rejected ?? 0),
+  });
+  for (const option of filter.options) {
+    const count = option.value === 'all' ? state?.questions.length ?? 0
+      : (state?.questions ?? []).filter(question => option.value === 'published'
+        ? question.status === 'published'
+        : option.value === 'validated' ? publishable(question) : question.validation?.passed === false).length;
+    option.textContent = t('questionFilterCount', { label: t(option.value), count: number.format(count) });
+  }
   position.textContent = questions.length ? t('position', { current: questionIndex + 1, total: questions.length }) : '—';
   previous.disabled = questionIndex === 0;
   next.disabled = questionIndex >= questions.length - 1;
