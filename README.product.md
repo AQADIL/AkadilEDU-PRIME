@@ -47,7 +47,7 @@ Daily quizzes, personal review and topic practice connect to one question bank. 
 | Your goal | Go directly to | What to expect |
 | --- | --- | --- |
 | Understand the learner experience | [Quizzes and personal review](#the-learning-experience) | Channel answers, explanations and follow-up practice |
-| Manage questions or a campaign | [Open the admin workspace](https://akadiledu-bot.web.app/) | Administrator access through verified Telegram identity |
+| Manage questions or a campaign | Open the administrator menu in the Telegram bot | Administrator access through verified Telegram identity |
 | Set up an authorised environment | [Setup guide](#deployment-and-first-run-setup) | Configuration, secrets, deployment and channel connection |
 | Inspect the implementation | [Architecture](#architecture) | Expand the technical section for data flow and identity |
 
@@ -227,6 +227,7 @@ Use these steps only with the owner's permission and your own authorized service
 **Requirements:** Node.js 22.12 or newer in the Node.js 22 line, npm, a configured Firebase project and a Telegram bot. Studio additionally requires an API account and a supported local browser.
 
 ```powershell
+npm ci
 npm --prefix bot ci
 npm --prefix functions ci
 npm --prefix admin-mini-app ci
@@ -257,7 +258,7 @@ Secrets for deployed functions belong in Secret Manager. Private API keys, bot t
 | `npm --prefix question-studio run cloud:check` | Type-check the Apps Script worker |
 | `npm --prefix question-studio start` | Start Studio at its configured loopback origin |
 
-There is no root npm workspace or combined root check command. Dependency versions are pinned in each component's lockfile.
+Root tooling provides `npm run check` for source checks, the admin build, Studio types and Firebase access-rule tests. Install the root and component dependencies first; rule tests require Java 21 or newer. Dependency versions are pinned in each lockfile.
 
 </details>
 
@@ -344,6 +345,26 @@ Local generation supports up to 16 concurrent jobs with serialized budget admiss
 The API limit belongs to this Studio run. It is not an account-wide cap and does not cover Firebase charges. Apps Script runtime quotas and provider rate limits remain separate. See [Studio operations](question-studio/README.md#costs-and-recovery) for the complete behavior.
 
 </details>
+
+## Continuous integration and delivery
+
+GitHub Actions runs the following gates for pull requests, pushes to `main` and manual workflow runs:
+
+| Gate | Checks |
+| --- | --- |
+| Source security | Credential patterns, private deployment destinations, JavaScript syntax, JSON/lockfile consistency and documentation links |
+| Admin checks | ESLint, a compile build and production dependency audit |
+| Backend checks | Bot/Functions installation, deployment packaging and production dependency audits |
+| Studio checks | Local and Apps Script TypeScript checks and a production dependency audit |
+| Access rules | Ten Realtime Database/Storage tests in isolated `demo-*` emulators and a tooling dependency audit |
+
+The dependency gates reject high and critical findings in their configured scope. Dependabot proposes weekly updates for the npm manifests and pinned Actions.
+
+After every gate passes on `main`, the production job validates the real deployment configuration, builds the admin application, deploys Firebase services and verifies that Hosting serves the exact build and its assets. Deployments are serialized. Pull requests do not receive production configuration or Google credentials.
+
+Google Workload Identity Federation grants short-lived access restricted to this repository, the production environment, the main branch and the deployment workflow. No service-account private key is stored in GitHub. The release destination is kept in an encrypted secret; no environment URL or preview link is published. Log masking covers the configured origin and Hosting aliases. Source checks use hostname fingerprints to detect accidental links without publishing the addresses.
+
+Deployment configuration is held in GitHub secrets `FIREBASE_WEB_CONFIG`, `FIREBASE_FUNCTIONS_CONFIG` and `FIREBASE_HOSTING_ORIGIN`. Repository variables select the project, deployment identity, identity provider, public Telegram script and private-host fingerprints. Bot, webhook and OTP secrets remain in Google Secret Manager.
 
 ## Operational checks
 

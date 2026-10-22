@@ -172,7 +172,7 @@ The following stack is present in the repositories; the integration design and m
 | Telegram service | Node.js 22, grammY | Bot interactions, channel answers and topic practice |
 | Administration Mini App | React 19, Vite 8, Tailwind CSS | Content and campaign management |
 | Server and data | Cloud Functions, Realtime Database, Authentication, Storage | Server operations, identities, learning data and materials |
-| Verification and delivery | ESLint, Node.js tests and rule emulators in the Web repository; component lint/build commands in the bot repository; GitHub Actions for the Web project | Available checks and configured delivery |
+| Verification and delivery | ESLint, Node.js tests and rule emulators in the Web repository; GitHub Actions source/build/type/rule checks and Firebase deployment in the Telegram repository; GitHub Actions for the Web project | Available checks and configured delivery |
 
 Dependency versions and scripts are defined by each component's manifests and lockfiles. The [product guide](README.product.md) gives the detailed implementation map. Technology alternatives and justification are tracked in [AEDU-5](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-5).
 
@@ -208,6 +208,7 @@ Use Node.js 22.12 or later in the Node.js 22 line, npm, a Telegram bot and a Fir
 ```sh
 git clone https://github.com/AQADIL/AkadilEDU-PRIME.git
 cd AkadilEDU-PRIME
+npm ci
 npm --prefix bot ci
 npm --prefix functions ci
 npm --prefix admin-mini-app ci
@@ -222,7 +223,7 @@ npm --prefix admin-mini-app run build
 npm --prefix functions run prepare:bot
 ```
 
-For local development without an active Telegram webhook, `npm --prefix bot start` uses polling. Deployed operation uses the configured webhook and scheduler. A real campaign also requires published questions and channel posting rights. There is no combined root npm test command; UI checks and manual Telegram scenarios cover different parts of the system.
+For local development without an active Telegram webhook, `npm --prefix bot start` uses polling. Deployed operation uses the configured webhook and scheduler. A real campaign also requires published questions and channel posting rights. Root tooling provides `npm run check` for source checks, the admin build, Studio types and Firebase rule tests; rule tests require Java 21 or newer. Connected Telegram scenarios remain separate operator checks.
 
 Follow the [deployment guide](README.product.md#deployment-and-first-run-setup) for complete environment, administrator, secret and deployment steps. The [product guide](README.product.md) describes additional tooling; the question-filling script and Question Studio are outside the proposed diploma scope.
 
