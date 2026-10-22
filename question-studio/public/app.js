@@ -10,6 +10,8 @@ const selectedTopics = new Set();
 const selectedQuestions = new Set();
 const controllers = new Set();
 const signatures = {};
+const questionDetails = new Map();
+const loadingQuestions = new Set();
 let state = null;
 let stateEtag = null;
 let csrfToken = null;
@@ -471,6 +473,24 @@ function referenceSources(value) {
   });
 }
 
+async function loadQuestionDetails(id, revision) {
+  const key = `${id}:${revision}`;
+  if (loadingQuestions.has(key)) return;
+  loadingQuestions.add(key);
+  try {
+    const result = await request(`/api/question?id=${encodeURIComponent(id)}`);
+    if (result.question?.id !== id || !result.question.translations) throw new Error(t('invalidResponse'));
+    questionDetails.delete(id);
+    questionDetails.set(id, { revision, question: result.question });
+    while (questionDetails.size > 3) questionDetails.delete(questionDetails.keys().next().value);
+    if (currentQuestionId === id) renderQuestion();
+  } catch (error) {
+    notifyError(error instanceof Error ? error.message : t('requestFailed'));
+  } finally {
+    loadingQuestions.delete(key);
+  }
+}
+
 function renderQuestion() {
   for (const language of languageButtons) language.button.setAttribute('aria-pressed', String(language.code === questionLanguage));
   const questions = visibleQuestions();
@@ -478,7 +498,12 @@ function renderQuestion() {
   if (followQuestions.checked) questionIndex = questions.length - 1;
   else if (savedIndex >= 0) questionIndex = savedIndex;
   questionIndex = Math.max(0, Math.min(questionIndex, questions.length - 1));
-  const question = questions[questionIndex];
+  const summary = questions[questionIndex];
+  const detail = summary && questionDetails.get(summary.id);
+  const question = state?.detailRevision !== undefined && summary ? detail?.question ?? summary : summary;
+  if (summary && state?.detailRevision !== undefined && detail?.revision !== state.detailRevision) {
+    void loadQuestionDetails(summary.id, state.detailRevision);
+  }
   if (question?.id !== currentQuestionId) reviewBody.scrollTop = 0;
   currentQuestionId = question?.id ?? null;
   questionCount.textContent = t('publishedCount', { count: number.format(state?.totals.published ?? 0) });
@@ -501,6 +526,7 @@ function renderQuestion() {
   questionCheckbox.checked = Boolean(question && selectedQuestions.has(question.id));
   replaceWhenChanged('question', reviewBody, [question, questionLanguage, questionFilter], () => {
     if (!question) return [element('p', 'empty', t(questionFilter === 'all' ? 'questionHint' : 'noFilteredQuestions'))];
+    if (!question.translations && state?.detailRevision !== undefined) return [element('p', 'empty', t('loadingQuestion'))];
     const content = element('article');
     content.lang = questionLanguage;
     const meta = element('div', 'question-meta');

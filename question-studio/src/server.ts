@@ -55,13 +55,22 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
   if (request.method === 'GET' && url.pathname === '/api/session') {
     json(response, 200, { csrfToken }); return;
   }
+  if (request.method === 'GET' && url.pathname === '/api/question') {
+    const id = z.string().regex(/^[a-f0-9]{40}$/).parse(url.searchParams.get('id'));
+    const question = state.questions.find(item => item.id === id);
+    if (!question) { json(response, 404, { error: 'Question not found' }); return; }
+    json(response, 200, { question: { ...question, repair: question.repair ? {
+      status: question.repair.status, attempts: question.repair.attempts, history: question.repair.history,
+    } : undefined } }); return;
+  }
   if (request.method === 'GET' && url.pathname === '/api/state') {
     const revision = stateRevision();
     const etag = `"${stateSession}:${revision}"`;
     response.setHeader('ETag', etag);
     response.setHeader('Cache-Control', 'private, no-cache');
     if (request.headers['if-none-match'] === etag) { response.writeHead(304); response.end(); return; }
-    if (stateCache?.revision !== revision) stateCache = { revision, body: JSON.stringify(publicState(state, config)) };
+    if (stateCache?.revision !== revision) stateCache = { revision,
+      body: JSON.stringify(publicState(state, { ...config, detailRevision: revision })) };
     response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
     response.end(stateCache.body); return;
   }

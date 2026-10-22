@@ -9,6 +9,7 @@ export interface PublicStateConfig {
   reviewPrices: ModelPrices;
   repairMaxAttempts: number;
   concurrency?: number;
+  detailRevision?: number;
 }
 
 export function publicState(state: StudioState, config: PublicStateConfig) {
@@ -108,7 +109,12 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
   const visibleJobs = state.activeTopicId ? (state.jobs ?? []).filter(job => job.topicId === state.activeTopicId) : preflight ? [] : state.jobs ?? [];
   return {
     ...state, calls: undefined, sourceText: undefined, pendingBatch: undefined, generationCallId: undefined, jobs: undefined,
-    questions: state.questions.map(question => question.repair ? { ...question, repair: {
+    detailRevision: config.detailRevision,
+    questions: state.questions.map(question => config.detailRevision !== undefined ? {
+      id: question.id, topic: question.topic, status: question.status, difficulty: question.difficulty,
+      publishedAt: question.publishedAt, generation: { createdAt: question.generation.createdAt },
+      validation: { passed: question.validation.passed },
+    } : question.repair ? { ...question, repair: {
       status: question.repair.status, attempts: question.repair.attempts, history: question.repair.history,
     } } : question),
     topics: state.topics.map(topic => topic.progress ? { ...topic, progress: { ...topic.progress, audit: undefined } } : topic),

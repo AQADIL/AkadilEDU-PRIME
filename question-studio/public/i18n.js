@@ -5,6 +5,7 @@ const messages = {
     noTopics: 'Темы появятся после подключения к базе.', noMatches: 'Нет совпадений',
     workspace: 'Создание заданий', review: 'Просмотр заданий', activity: 'Ход работы',
     connection: 'Подключение к студии…', connected: 'Подключено', reconnect: 'Связь прервана. Повтор через {seconds} с.',
+    loadingQuestion: 'Загрузка задания…',
     idle: 'Готово к запуску', running: 'В работе', paused: 'На паузе', error: 'Остановлено из-за ошибки',
     budget_exhausted: 'Недостаточно свободного бюджета', completed: 'Работа завершена', model: 'Модель',
     modelPair: 'Создание: {generation} · Проверка: {review}',
