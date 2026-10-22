@@ -10,6 +10,7 @@ import { loadTopics } from './database.js';
 import { startWorker, pauseWorker, waitForWorker, publishQuestions, rerenderQuestions, startSchema } from './worker.js';
 import { closeRenderer } from './render.js';
 import { publicState } from './public-state.js';
+import { queuePresentationRepairs } from './presentationMigration.js';
 
 if (config.executionOwner === 'google-apps-script') {
   await releaseLock();
@@ -135,6 +136,7 @@ async function handle(request: IncomingMessage, response: ServerResponse) {
 }
 
 await loadTopics();
+await queuePresentationRepairs();
 await event(`Подключено тем: ${state.totals.eligible}. Создание: ${config.model}. Проверка: ${config.reviewModel}. Бюджет: $${state.budget.limit}.`);
 const server = createServer((request, response) => {
   handle(request, response).catch(error => {
