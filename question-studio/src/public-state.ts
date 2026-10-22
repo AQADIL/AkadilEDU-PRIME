@@ -103,18 +103,21 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
   const activeTopicIds = state.activeTopicId ? [state.activeTopicId]
     : [...new Set([...(state.jobs ?? []).map(job => job.topicId), ...repairs.map(question => question.topic)])];
   const currentTopic = state.topics.find(topic => topic.id === state.activeTopicId);
-  const visibleJobs = state.activeTopicId ? (state.jobs ?? []).filter(job => job.topicId === state.activeTopicId) : state.jobs ?? [];
+  const coverageTopics = state.topics.filter(topic => topic.progress?.status === 'checking');
+  const preflight = !state.activeTopicId && state.status === 'running' && coverageTopics.length > 0;
+  const visibleJobs = state.activeTopicId ? (state.jobs ?? []).filter(job => job.topicId === state.activeTopicId) : preflight ? [] : state.jobs ?? [];
   return {
     ...state, calls: undefined, sourceText: undefined, pendingBatch: undefined, generationCallId: undefined, jobs: undefined,
     questions: state.questions.map(question => question.repair ? { ...question, repair: {
       status: question.repair.status, attempts: question.repair.attempts, history: question.repair.history,
     } } : question),
     topics: state.topics.map(topic => topic.progress ? { ...topic, progress: { ...topic.progress, audit: undefined } } : topic),
-    budget: { ...state.budget, checkpoint: undefined,
+    budget: { ...state.budget, checkpoint: undefined, history: undefined,
       ...(state.budget.checkpoint ? { allowance: {
         source: state.budget.checkpoint.source, reportedSpent: state.budget.checkpoint.reportedSpent,
         limit: state.budget.checkpoint.additionalLimit, spent: accounting.additionalSpent,
         historicalReserved: accounting.historicalReserved,
+        historicalSpent: state.budget.history?.at(-1)?.spent ?? state.budget.checkpoint.reportedSpent,
       } } : {}),
     },
     activeTopicIds,
@@ -128,12 +131,12 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
         ...visibleJobs.map(job => ({ id: job.id, topicId: job.topicId,
           topicName: state.topics.find(topic => topic.id === job.topicId)?.name ?? job.topicId,
           stage: job.stage, count: job.count, retryAt: job.retryAt })),
-        ...repairs.map(question => ({ id: `repair:${question.id}`, topicId: question.topic,
+        ...(preflight ? [] : repairs).map(question => ({ id: `repair:${question.id}`, topicId: question.topic,
           topicName: state.topics.find(topic => topic.id === question.topic)?.name ?? question.topic,
           stage: (question.repair?.retryAt ?? 0) > Date.now() ? 'waiting' : question.repair?.candidate ? 'review' : 'generation',
           count: 1, retryAt: question.repair?.retryAt })),
-        ...(currentTopic?.progress?.status === 'checking' ? [{ id: `coverage:${currentTopic.id}`, topicId: currentTopic.id,
-          topicName: currentTopic.name, stage: 'coverage', count: currentTopic.generated }] : []),
+        ...coverageTopics.filter(topic => preflight || topic.id === state.activeTopicId).map(topic => ({
+          id: `coverage:${topic.id}`, topicId: topic.id, topicName: topic.name, stage: 'coverage', count: topic.generated })),
       ],
     } } : {}),
     model: config.model,

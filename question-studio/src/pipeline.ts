@@ -93,6 +93,40 @@ function availableTopic(topic: Topic): boolean {
     && topic.progress?.status !== 'completed' && topic.progress?.status !== 'blocked';
 }
 
+async function auditExistingTopics(shouldPause: () => boolean): Promise<void> {
+  if (config.coverageConcurrency <= 1) return;
+  const candidates = state.topics.filter(topic => availableTopic(topic) && !topic.progress?.curriculumRole
+    && topic.generated >= config.minTopicQuestions && !state.jobs!.some(job => job.topicId === topic.id));
+  if (!candidates.length) return;
+  const previousTopicId = state.activeTopicId;
+  state.activeTopicId = null;
+  await event(`Параллельная проверка покрытия: ${candidates.length} тем, до ${config.coverageConcurrency} запросов. Новые вопросы создаются только для выявленных пробелов.`);
+  let cursor = 0;
+  let failure: unknown;
+  const stopped = () => shouldPause() || Boolean(failure);
+  await Promise.all(Array.from({ length: Math.min(config.coverageConcurrency, candidates.length) }, async () => {
+    while (!stopped()) {
+      const topic = candidates[cursor++];
+      if (!topic) return;
+      try { await checkTopicCompletion(topic, stopped); }
+      catch (error) {
+        if (error instanceof RequestPausedError) return;
+        if (error instanceof UnidentifiedApiOutcomeError) recoverUnidentifiedCall(error.callId);
+        if (error instanceof UnidentifiedApiOutcomeError || error instanceof ResponsePollingError || error instanceof RecoverableApiError) {
+          if (error instanceof RecoverableApiError) {
+            topic.requestFailures = (topic.requestFailures ?? 0) + 1;
+            if (topic.progress) delete topic.progress.audit;
+          }
+          await event(`${topic.name}: проверка покрытия отложена — ${safeError(error)}.`, 'warning', topic.id);
+        } else { failure = error; return; }
+      }
+    }
+  }));
+  state.activeTopicId = previousTopicId;
+  await save();
+  if (failure) throw failure;
+}
+
 async function archiveFailedJob(job: GenerationJob, error: unknown) {
   const topic = state.topics.find(item => item.id === job.topicId);
   if (topic) topic.requestFailures = (topic.requestFailures ?? 0) + 1;
@@ -128,6 +162,7 @@ export async function runParallelPipeline(handlers: PipelineHandlers, pauseReque
   state.error = null;
   try {
     await migrateSerialWork();
+    await auditExistingTopics(shouldPause);
     await event(`Последовательно завершаю темы. До ${config.concurrency} параллельных задач внутри текущей темы; проверка сохранена.`, 'info');
     const launch = (id: string, topicId: string, operation: () => Promise<void>, job?: GenerationJob, question?: StoredQuestion) => {
       const result = operation().then((): TaskResult => ({ id, job, question }), (error: unknown): TaskResult => {

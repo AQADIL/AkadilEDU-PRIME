@@ -12,6 +12,7 @@ const messages = {
     topic_working: 'В работе', topic_checking: 'Проверка покрытия', topic_needs_work: 'Дополнение пробелов',
     topic_completed: 'Готово', topic_blocked: 'Требует разбора',
     currentTopic: '{name} · Готовых тем: {completed} / {total}', parallel_coverage: 'Проверка программы и навыков',
+    credentialBudget: 'Новый ключ: {spent} / {limit}. Расходы предыдущего этапа: {historical}; история сохранена.',
     parallel_research: 'Поиск источников', parallel_generation: 'Создание', parallel_review: 'Проверка',
     parallel_publishing: 'Сохранение в базу', parallel_waiting: 'Ожидание',
     parallelWaitingUntil: 'Повтор в {time}', parallelQuestionCount: 'Заданий: {count}',

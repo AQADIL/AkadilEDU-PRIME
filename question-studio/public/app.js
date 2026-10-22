@@ -659,9 +659,10 @@ function render() {
     forecast.replaceChildren(element('p', 'forecast-note', t(state.forecast?.unavailableReason === 'accounting' ? 'forecastAccounting' : 'forecastPending')));
   }
   if (state.budget.allowance) {
-    forecast.prepend(element('p', 'forecast-note', t('additionalBudget', {
+    forecast.prepend(element('p', 'forecast-note', t(state.budget.allowance.source === 'new-api-credential' ? 'credentialBudget' : 'additionalBudget', {
       spent: money.format(state.budget.allowance.spent), limit: money.format(state.budget.allowance.limit),
       baseline: money.format(state.budget.allowance.reportedSpent),
+      historical: money.format(state.budget.allowance.historicalSpent),
     })));
   }
   const limit = state.budget.limit || 1;
