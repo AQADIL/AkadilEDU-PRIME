@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { config } from './config.js';
 import type { StudioState } from './schema.js';
 import { generationJobSchema } from './schema.js';
+import { budgetCheckpointSchema, budgetUsage } from './budget.js';
 
 const stateFile = path.join(config.dataDir, 'state.json');
 const lockFile = path.join(config.dataDir, 'studio.lock');
@@ -94,6 +95,10 @@ export const state: StudioState = await readFile(stateFile, 'utf8').then(value =
   saved.config.reasoningEffort = config.reasoningEffort;
   saved.config.batchSize = config.batchSize;
   saved.budget.limit = config.budget;
+  if (saved.budget.checkpoint) saved.budget.checkpoint = budgetCheckpointSchema.parse(saved.budget.checkpoint);
+  const usage = budgetUsage(saved.calls, saved.budget);
+  saved.budget.spent = usage.spent;
+  saved.budget.reserved = usage.reserved;
   if (saved.status === 'running') {
     saved.status = 'paused'; saved.phase = 'Работа прервана. Можно продолжить с сохранённого этапа.';
   }
@@ -106,8 +111,9 @@ export const state: StudioState = await readFile(stateFile, 'utf8').then(value =
 
 let writes = Promise.resolve();
 export function save(): Promise<void> {
-  state.budget.spent = state.calls.reduce((sum, call) => sum + call.cost, 0);
-  state.budget.reserved = state.calls.filter(call => call.status !== 'settled').reduce((sum, call) => sum + call.reserved, 0);
+  const usage = budgetUsage(state.calls, state.budget);
+  state.budget.spent = usage.spent;
+  state.budget.reserved = usage.reserved;
   const countsByTopic = new Map<string, number>();
   let generated = 0;
   let published = 0;

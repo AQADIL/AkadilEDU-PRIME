@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { config } from './config.js';
 import { generatedQuestionSchema, type StudioState } from '../src/schema.js';
+import { budgetCheckpointSchema, budgetUsage } from '../src/budget.js';
 
 const accounting = z.object({
   version: z.literal(1), runId: z.string().min(1),
@@ -53,8 +54,8 @@ function validateState(value: unknown): StudioState {
       throw new Error('Invalid quarantined API request');
     }
   }
-  const spent = saved.calls.reduce((sum, call) => sum + call.cost, 0);
-  const reserved = saved.calls.filter(call => call.status !== 'settled').reduce((sum, call) => sum + call.reserved, 0);
+  if (saved.budget.checkpoint) saved.budget.checkpoint = budgetCheckpointSchema.parse(saved.budget.checkpoint);
+  const { spent, reserved } = budgetUsage(saved.calls, saved.budget);
   if (Math.abs(spent - saved.budget.spent) > 1e-8 || Math.abs(reserved - saved.budget.reserved) > 1e-8) {
     throw new Error('Budget ledger does not match its call history');
   }
@@ -118,8 +119,9 @@ export function loadState() {
 }
 
 export function save() {
-  state.budget.spent = state.calls.reduce((sum, call) => sum + call.cost, 0);
-  state.budget.reserved = state.calls.filter(call => call.status !== 'settled').reduce((sum, call) => sum + call.reserved, 0);
+  const { spent, reserved } = budgetUsage(state.calls, state.budget);
+  state.budget.spent = spent;
+  state.budget.reserved = reserved;
   state.totals = { eligible: state.topics.filter(topic => topic.eligible).length,
     generated: state.questions.filter(question => question.validation.passed).length,
     published: state.questions.filter(question => question.status === 'published').length,

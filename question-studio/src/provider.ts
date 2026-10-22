@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { z } from 'zod';
 import { config } from './config.js';
+import { budgetUsage, canReserve } from './budget.js';
 import { state, save, event } from './store.js';
 import type { ApiCall, ModelPrices, ReferenceSource } from './schema.js';
 import { assertSettledCallWithinReservation, calculateUsageCost, exceededWebSearchLimit, restoreGeneratedQuestion, usageSchema } from './schema.js';
@@ -332,13 +333,16 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
         let waitingForBudget = false;
         for (;;) {
           if (shouldPause?.()) throw new RequestPausedError('Пауза запрошена во время ожидания свободного бюджета.');
-          const spent = state.calls.reduce((sum, item) => sum + item.cost, 0);
-          const held = state.calls.filter(item => item.status !== 'settled').reduce((sum, item) => sum + item.reserved, 0);
-          if (spent + held + reserved <= state.budget.limit) break;
+          const usage = budgetUsage(state.calls, state.budget);
+          const { spent, reserved: held } = usage;
+          if (canReserve(usage, state.budget, reserved)) break;
           const inFlight = state.calls.some(item => item.status === 'pending'
             || (item.status === 'reserved' && activeCreations.has(item.id)));
           if (!inFlight) {
-            throw new BudgetError(`Недостаточно свободного бюджета: потрачено $${spent.toFixed(2)}, резерв $${held.toFixed(2)}, следующий запрос до $${reserved.toFixed(2)}, лимит $${state.budget.limit.toFixed(2)}.`);
+            const limit = state.budget.checkpoint
+              ? Math.min(state.budget.limit, state.budget.checkpoint.reportedSpent + state.budget.checkpoint.additionalLimit)
+              : state.budget.limit;
+            throw new BudgetError(`Недостаточно свободного бюджета: потрачено $${spent.toFixed(2)}, резерв $${held.toFixed(2)}, следующий запрос до $${reserved.toFixed(2)}, лимит $${limit.toFixed(2)}.`);
           }
           if (!waitingForBudget) {
             waitingForBudget = true;

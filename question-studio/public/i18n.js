@@ -16,6 +16,7 @@ const messages = {
     publishedCount: 'Опубликовано: {count}', questionFilterCount: '{label} ({count})',
     questionCountDetails: 'Всего в студии: {total}. Из них с замечаниями: {rejected}; они не опубликованы.',
     budget: 'Бюджет', spent: 'Потрачено', reserved: 'Зарезервировано', limit: 'Лимит',
+    additionalBudget: 'Дополнительные расходы: {spent} / {limit}. Исходный расход из кабинета OpenAI: {baseline} (подтверждён вами).',
     run: 'Начать генерацию', pause: 'Приостановить', resume: 'Продолжить',
     mode: 'Источник заданий', generate: 'Создать по темам', parse: 'Из своего текста',
     perTopic: 'Начальная оценка на тему', batchSize: 'Размер партии', sourceText: 'Исходный текст',

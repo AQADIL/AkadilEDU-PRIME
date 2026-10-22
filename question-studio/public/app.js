@@ -611,6 +611,12 @@ function render() {
   } else {
     forecast.replaceChildren(element('p', 'forecast-note', t(state.forecast?.unavailableReason === 'accounting' ? 'forecastAccounting' : 'forecastPending')));
   }
+  if (state.budget.allowance) {
+    forecast.prepend(element('p', 'forecast-note', t('additionalBudget', {
+      spent: money.format(state.budget.allowance.spent), limit: money.format(state.budget.allowance.limit),
+      baseline: money.format(state.budget.allowance.reportedSpent),
+    })));
+  }
   const limit = state.budget.limit || 1;
   const spentPercent = Math.min(100, Math.max(0, state.budget.spent / limit * 100));
   budgetUsed.style.width = `${spentPercent}%`;

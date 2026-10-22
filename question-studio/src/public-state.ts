@@ -1,4 +1,5 @@
 import type { ApiCall, ModelPrices, StudioState } from './schema.js';
+import { budgetUsage } from './budget.js';
 
 export interface PublicStateConfig {
   model: string;
@@ -88,9 +89,17 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
   const costPerAccepted = acceptedInSample && !incompleteAccounting ? sampleCost / acceptedInSample : null;
   const remainingTarget = state.topics.filter(t => t.eligible).reduce((sum, t) => sum + Math.max(0, t.target - t.generated), 0);
   const repairs = state.questions.filter(question => question.repair?.status === 'running');
+  const accounting = budgetUsage(state.calls, state.budget);
   const activeTopicIds = [...new Set([...(state.jobs ?? []).map(job => job.topicId), ...repairs.map(question => question.topic)])];
   return {
     ...state, calls: undefined, sourceText: undefined, pendingBatch: undefined, generationCallId: undefined, jobs: undefined,
+    budget: { ...state.budget, checkpoint: undefined,
+      ...(state.budget.checkpoint ? { allowance: {
+        source: state.budget.checkpoint.source, reportedSpent: state.budget.checkpoint.reportedSpent,
+        limit: state.budget.checkpoint.additionalLimit, spent: accounting.additionalSpent,
+        historicalReserved: accounting.historicalReserved,
+      } } : {}),
+    },
     activeTopicIds,
     ...(config.concurrency ? { pipeline: {
       concurrency: state.mode === 'parse' ? 1 : config.concurrency,

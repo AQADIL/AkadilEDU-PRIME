@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { config } from './config.js';
+import { budgetUsage, canReserve } from '../src/budget.js';
 import { state, save, event } from './store.js';
 import type { ApiCall, ModelPrices, ReferenceSource } from '../src/schema.js';
 import { assertSettledCallWithinReservation, calculateUsageCost, exceededWebSearchLimit, restoreGeneratedQuestion, usageSchema } from '../src/schema.js';
@@ -246,7 +247,7 @@ export function runStructured<T>(kind: ApiCall['kind'], instructions: string, in
       };
       const webSearchMaxCalls = previous?.webSearchMaxCalls ?? config.webSearchMaxCalls;
       const reserved = estimateReservation(instructions, inputText, jsonSchema, kind, maxOutputTokens, prices, webSearchMaxCalls);
-      if (state.budget.spent + state.budget.reserved + reserved > state.budget.limit) {
+      if (!canReserve(budgetUsage(state.calls, state.budget), state.budget, reserved)) {
         throw new BudgetError('Оставшегося бюджета недостаточно для безопасного резерва следующего запроса.');
       }
       call = {

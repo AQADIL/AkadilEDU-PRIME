@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BudgetCheckpoint } from './budget.js';
 import { questionPresentationIssues } from './questionPresentation.js';
 
 export const languages = ['kk', 'ru', 'en'] as const;
@@ -284,7 +285,7 @@ export interface StudioState {
   phase: string;
   error: string | null;
   model: string;
-  budget: { limit: number; spent: number; reserved: number };
+  budget: { limit: number; spent: number; reserved: number; checkpoint?: BudgetCheckpoint };
   config: { perTopic: number; batchSize: number; reasoningEffort: string; difficultyWeights: Record<Difficulty, number> };
   topics: Topic[];
   events: { id: string; time: number; level: string; message: string; topicId?: string }[];
