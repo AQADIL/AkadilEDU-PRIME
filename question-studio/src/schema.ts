@@ -201,7 +201,7 @@ export interface ApiCall {
   id: string;
   responseId?: string;
   model: string;
-  serviceTier?: 'default';
+  serviceTier?: 'default' | 'fast' | 'ultrafast';
   prices: ModelPrices;
   kind: 'generation' | 'review' | 'research' | 'repair';
   attempt?: number;
@@ -210,6 +210,7 @@ export interface ApiCall {
   maxOutputTokens?: number;
   terminalReason?: string;
   terminalRetryable?: boolean;
+  submissionError?: { status?: number; code?: string; message: string; requestId?: string; transportCode?: string };
   status: 'reserved' | 'pending' | 'settled' | 'uncertain';
   quarantined?: boolean;
   reserved: number;
@@ -303,7 +304,8 @@ export interface StudioState {
   phase: string;
   error: string | null;
   model: string;
-  budget: { limit: number; spent: number; reserved: number; checkpoint?: BudgetCheckpoint };
+  budget: { limit: number; spent: number; reserved: number; checkpoint?: BudgetCheckpoint;
+    history?: { closedAt: number; spent: number; reserved: number; limit: number; checkpoint?: BudgetCheckpoint }[] };
   config: { perTopic: number; batchSize: number; reasoningEffort: string; difficultyWeights: Record<Difficulty, number>;
     topicLimits?: { minimum: number; maximum: number } };
   topics: Topic[];

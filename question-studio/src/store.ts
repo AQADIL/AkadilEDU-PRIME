@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import type { StudioState } from './schema.js';
 import { generationJobSchema } from './schema.js';
-import { budgetCheckpointSchema, budgetUsage } from './budget.js';
+import { budgetCheckpointSchema, budgetHistorySchema, budgetUsage } from './budget.js';
 import { StatePersistence } from './statePersistence.js';
 
 const stateFile = path.join(config.dataDir, 'state.json');
@@ -59,7 +59,7 @@ export const state: StudioState = await loadState().then(saved => {
     }
   }
   const previousModel = saved.model;
-  if (previousModel !== config.model && saved.calls.some(call => call.status !== 'settled')) {
+  if (previousModel !== config.model && saved.calls.some(call => call.status !== 'settled' && !call.quarantined)) {
     throw new Error('Finish or reconcile outstanding API calls before changing the model');
   }
   for (const call of saved.calls) {
@@ -109,6 +109,7 @@ export const state: StudioState = await loadState().then(saved => {
     ? Math.max(topic.generated, Math.min(topic.progress?.curriculumRole ? config.maxTopicQuestions : config.perTopic, topic.target)) : 0;
   saved.budget.limit = config.budget;
   if (saved.budget.checkpoint) saved.budget.checkpoint = budgetCheckpointSchema.parse(saved.budget.checkpoint);
+  if (saved.budget.history) saved.budget.history = budgetHistorySchema.parse(saved.budget.history);
   const usage = budgetUsage(saved.calls, saved.budget);
   saved.budget.spent = usage.spent;
   saved.budget.reserved = usage.reserved;

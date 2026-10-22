@@ -128,7 +128,8 @@ export function estimateReservation(instructions: string, input: string, schema:
 function request(endpoint: string, body?: object) {
   const response = UrlFetchApp.fetch(`${config.apiBase}${endpoint}`, {
     method: body ? 'post' : 'get',
-    headers: { Authorization: `Bearer ${config.apiKey}` },
+    headers: { Authorization: `Bearer ${config.apiKey}`,
+      ...(body && 'service_tier' in body && body.service_tier === 'ultrafast' ? { 'OpenAI-Service-Tier': 'ultrafast' } : {}) },
     contentType: 'application/json', muteHttpExceptions: true,
     ...(body ? { payload: JSON.stringify(body) } : {}),
   });
@@ -275,7 +276,7 @@ export function runStructured<T>(kind: ApiCall['kind'], instructions: string, in
           reasoning: { effort: kind === 'review' ? config.reviewReasoningEffort
             : kind === 'research' ? config.researchReasoningEffort : config.generationReasoningEffort },
           text: { format: { type: 'json_schema', name: kind, strict: true, schema: jsonSchema } },
-          max_output_tokens: maxOutputTokens, background: true, store: true,
+          max_output_tokens: maxOutputTokens, background: call.serviceTier !== 'ultrafast', store: true,
           ...(kind === 'research' ? {
             tools: [{ type: 'web_search', search_context_size: 'low' }],
             max_tool_calls: call.webSearchMaxCalls,

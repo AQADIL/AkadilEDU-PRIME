@@ -31,7 +31,7 @@ const envSchema = z.object({
   OPENAI_REVIEW_CACHED_INPUT_PRICE_PER_MILLION: z.coerce.number().nonnegative(),
   OPENAI_REVIEW_CACHE_WRITE_PRICE_PER_MILLION: positive,
   OPENAI_REVIEW_OUTPUT_PRICE_PER_MILLION: positive,
-  OPENAI_SERVICE_TIER: z.literal('default'),
+  OPENAI_SERVICE_TIER: z.enum(['default', 'fast', 'ultrafast']),
   OPENAI_INPUT_PRICE_PER_MILLION: positive,
   OPENAI_CACHED_INPUT_PRICE_PER_MILLION: z.coerce.number().nonnegative(),
   OPENAI_CACHE_WRITE_PRICE_PER_MILLION: positive,

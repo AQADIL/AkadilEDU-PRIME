@@ -10,7 +10,7 @@ import { assertSettledCallWithinReservation, calculateUsageCost, exceededWebSear
 const responseSchema = z.object({
   id: z.string(),
   status: z.string(),
-  service_tier: z.string().optional(),
+  service_tier: z.string().nullish(),
   max_output_tokens: z.number().int().positive().nullish(),
   output: z.array(z.object({
     type: z.string(),
@@ -51,7 +51,8 @@ export class RecoverableApiError extends Error {
 }
 
 class HttpError extends Error {
-  constructor(readonly status: number, message: string, readonly retryAfterMs?: number, readonly code?: string) {
+  constructor(readonly status: number, message: string, readonly retryAfterMs?: number, readonly code?: string,
+    readonly requestId?: string) {
     super(`OpenAI HTTP ${status}: ${message}`);
   }
 }
@@ -97,6 +98,8 @@ const callLabel = (kind: ApiCall['kind']) => ({
 const activeCreations = new Set<string>();
 let admissionAfter = 0;
 let admissions = Promise.resolve();
+let creationHealth: 'unverified' | 'ready' | 'blocked' = 'unverified';
+let creationFailure: string | undefined;
 function admitRequest<T>(operation: () => Promise<T>): Promise<T> {
   const result = admissions.then(operation);
   admissions = result.then(() => undefined, () => undefined);
@@ -135,13 +138,64 @@ export function estimateReservation(instructions: string, input: string, schema:
   return (reservedInput * maximumInputPrice + maxOutputTokens * prices.output) / 1000000 + toolFee;
 }
 
-async function request(endpoint: string, body?: object, clientRequestId?: string) {
+async function streamedResponse(response: Response, onResponseId?: (id: string) => Promise<void>) {
+  if (!response.body) throw new Error('OpenAI returned an empty event stream');
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let responseId: string | undefined;
+  const consume = async (frame: string) => {
+    const payload = frame.split(/\r?\n/).filter(line => line.startsWith('data:'))
+      .map(line => line.slice(5).trimStart()).join('\n');
+    if (!payload || payload === '[DONE]') return;
+    const item = z.object({ type: z.string(), response: z.unknown().optional(),
+      message: z.string().optional() }).parse(JSON.parse(payload) as unknown);
+    if (item.type === 'error') throw new Error(item.message ?? 'OpenAI stream failed');
+    if (item.response === undefined) return;
+    const identity = z.object({ id: z.string().min(1) }).parse(item.response);
+    if (responseId && responseId !== identity.id) throw new Error('OpenAI stream changed its response ID');
+    if (!responseId) {
+      responseId = identity.id;
+      await onResponseId?.(responseId);
+    }
+    if (['response.completed', 'response.failed', 'response.incomplete', 'response.cancelled'].includes(item.type)) {
+      return responseSchema.parse(item.response);
+    }
+  };
+  try {
+    for (;;) {
+      const chunk = await reader.read();
+      buffer += decoder.decode(chunk.value, { stream: !chunk.done });
+      if (buffer.length > 16 * 1024 * 1024) throw new Error('OpenAI event exceeded the response size limit');
+      let separator: RegExpMatchArray | null;
+      while ((separator = buffer.match(/\r?\n\r?\n/))) {
+        const position = separator.index!;
+        const frame = buffer.slice(0, position);
+        buffer = buffer.slice(position + separator[0].length);
+        const result = await consume(frame);
+        if (result) return result;
+      }
+      if (chunk.done) {
+        const result = await consume(buffer);
+        if (result) return result;
+        throw new Error('OpenAI stream ended before its terminal response');
+      }
+    }
+  } finally {
+    await reader.cancel().catch(() => undefined);
+    reader.releaseLock();
+  }
+}
+
+async function request(endpoint: string, body?: object, clientRequestId?: string,
+  onResponseId?: (id: string) => Promise<void>) {
   const response = await fetch(`${config.apiBase}${endpoint}`, {
     method: body ? 'POST' : 'GET',
     headers: { Authorization: `Bearer ${config.apiKey}`, 'Content-Type': 'application/json',
+      ...(body && 'service_tier' in body && body.service_tier === 'ultrafast' ? { 'OpenAI-Service-Tier': 'ultrafast' } : {}),
       ...(clientRequestId ? { 'X-Client-Request-Id': clientRequestId } : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
-    signal: AbortSignal.timeout(60000),
+    signal: AbortSignal.timeout(config.apiTimeoutMs),
   });
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
@@ -150,9 +204,16 @@ async function request(endpoint: string, body?: object, clientRequestId?: string
     const retryAfterMs = retryAfter === null ? undefined : /^\d+(?:\.\d+)?$/.test(retryAfter)
       ? Number(retryAfter) * 1000 : Math.max(0, Date.parse(retryAfter) - Date.now());
     throw new HttpError(response.status, parsed.success ? parsed.data.error.message : 'Request failed',
-      Number.isFinite(retryAfterMs) ? retryAfterMs : undefined, parsed.success ? parsed.data.error.code ?? undefined : undefined);
+      Number.isFinite(retryAfterMs) ? retryAfterMs : undefined, parsed.success ? parsed.data.error.code ?? undefined : undefined,
+      response.headers.get('x-request-id') ?? undefined);
   }
-  return responseSchema.parse(await response.json());
+  if (response.headers.get('content-type')?.includes('text/event-stream')) {
+    return streamedResponse(response, onResponseId);
+  }
+  const data: unknown = await response.json();
+  const identity = z.object({ id: z.string().min(1) }).safeParse(data);
+  if (identity.success && onResponseId) await onResponseId(identity.data.id);
+  return responseSchema.parse(data);
 }
 
 function attemptNumber(call: ApiCall): number {
@@ -251,6 +312,7 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
     }
   }
   for (;;) {
+    let submittedResponse: z.infer<typeof responseSchema> | undefined;
     if (call?.status === 'settled' && call.result !== undefined) {
       const result = schema.safeParse(normalizeGenerationResult(kind, call.result));
       if (result.success) {
@@ -306,6 +368,11 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
         status: 'reserved', reserved, cost: 0,
       };
       call = await admitRequest(async () => {
+        while (creationHealth === 'unverified' && activeCreations.size > 0) {
+          if (shouldPause?.()) throw new RequestPausedError('Пауза запрошена до проверки доступности API.');
+          await delay(100);
+        }
+        if (creationHealth === 'blocked') throw new Error(creationFailure ?? 'Создание запросов остановлено после ошибки API.');
         while (admissionAfter > Date.now()) {
           if (shouldPause?.()) throw new RequestPausedError('Пауза запрошена во время ожидания лимита API.');
           await delay(Math.min(1000, admissionAfter - Date.now()));
@@ -370,13 +437,20 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
           reasoning: { effort: options?.reasoningEffort ?? (kind === 'review' ? config.reviewReasoningEffort
             : kind === 'research' ? config.researchReasoningEffort : config.generationReasoningEffort) },
           text: { format: { type: 'json_schema', name: kind, strict: true, schema: jsonSchema } },
-          max_output_tokens: maxOutputTokens, background: true, store: true,
+          max_output_tokens: maxOutputTokens, background: call.serviceTier !== 'ultrafast',
+          stream: call.serviceTier === 'ultrafast', store: true,
           ...(kind === 'research' ? {
             tools: [{ type: 'web_search', search_context_size: 'low' }],
             max_tool_calls: call.webSearchMaxCalls,
             include: ['web_search_call.action.sources'],
           } : {}),
-        }, call.id);
+        }, call.id, async id => {
+          call!.responseId = id;
+          call!.status = 'pending';
+          await save();
+        });
+        creationHealth = 'ready';
+        submittedResponse = created;
         call.responseId = created.id;
         call.status = 'pending';
         await save();
@@ -384,6 +458,23 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
           await event(`${callLabel(kind)}: автоматическая попытка ${call.attempt}/${config.apiMaxAttempts}, причина: ${previous.terminalReason}. Лимит ответа: ${maxOutputTokens}.`);
         }
       } catch (error) {
+        const message = (error instanceof Error ? error.message : 'Unknown API submission failure')
+          .replaceAll(config.apiKey, '[redacted]').slice(0, 1500);
+        call.submissionError = { message, ...(error instanceof HttpError ? {
+          status: error.status, code: error.code, requestId: error.requestId,
+        } : {}), ...(error instanceof Error && error.cause instanceof Error && 'code' in error.cause
+          && typeof error.cause.code === 'string' ? { transportCode: error.cause.code } : {}) };
+        if (!call.responseId && error instanceof HttpError
+          && [400, 401, 403, 404, 405, 413, 415, 422].includes(error.status)) {
+          call.status = 'settled';
+          call.cost = 0;
+          call.terminalReason = error.code ?? `http_${error.status}`;
+          call.terminalRetryable = false;
+          creationHealth = 'blocked';
+          creationFailure = message;
+          await save();
+          throw new Error(message);
+        }
         if (!call.responseId && error instanceof HttpError && error.status === 429) {
           admissionAfter = Math.max(admissionAfter, Date.now() + Math.max(config.recoveryBackoffMs, error.retryAfterMs ?? 0));
           call.status = 'settled';
@@ -397,7 +488,12 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
           continue;
         }
         call.status = call.responseId ? 'pending' : 'uncertain';
-        if (!call.responseId) call.quarantined = true;
+        if (!call.responseId) {
+          call.quarantined = true;
+          creationHealth = 'unverified';
+          admissionAfter = Math.max(admissionAfter, Date.now() + Math.max(config.recoveryBackoffMs,
+            error instanceof HttpError ? error.retryAfterMs ?? 0 : 0));
+        }
         await save();
         if (!call.responseId) throw new UnidentifiedApiOutcomeError(call.id);
         throw new ResponsePollingError(config.recoveryBackoffMs);
@@ -411,7 +507,8 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
     for (;;) {
       try {
         const include = kind === 'research' ? '?include%5B%5D=web_search_call.action.sources' : '';
-        response = await request(`/responses/${encodeURIComponent(call.responseId!)}${include}`);
+        response = submittedResponse ?? await request(`/responses/${encodeURIComponent(call.responseId!)}${include}`);
+        submittedResponse = undefined;
         pollFailures = 0;
       } catch (error) {
         const transient = error instanceof HttpError
