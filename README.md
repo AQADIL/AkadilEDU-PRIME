@@ -1,160 +1,172 @@
-<p align="center">
-  <img src="assets/brand/cover.svg" alt="AkadilEDU PRIME — Practice. Understand. Progress. Mathematics practice in Kazakh, Russian and English." width="100%">
-</p>
+# AkadilEDU - Diploma Project
 
-# AkadilEDU PRIME
+**Development of an Educational Ecosystem for UNT Mathematics Preparation with AI-Generated Personalized Learning Plans**
 
-**A Telegram learning loop for UNT mathematics: answer in the channel, understand your mistakes, practise what you need.**
+Astana IT University · Software Engineering · 2026-2027<br>
+**Repository component:** Telegram bot and administration application<br>
+**Documentation reviewed:** 22 October 2026
 
-Daily quizzes, personal review and topic practice connect to one question bank. Administrators manage the content and schedule through a browser or Telegram Mini App. A separate Question Studio creates, checks and repairs multilingual practice material through the API.
+[Product guide](README.product.md) · [YouTrack project](https://akadiledu-diploma.youtrack.cloud/issues/AEDU) · [Task board](https://akadiledu-diploma.youtrack.cloud/agiles/204-1/218-1) · [Web repository](https://github.com/AQADIL/AkadilEDU) · [Telegram repository](https://github.com/AQADIL/AkadilEDU-PRIME)
 
-[Admin workspace](https://akadiledu-bot.web.app/) · [Setup](QUICKSTART.md) · [Question Studio](question-studio/README.md) · [Security](SECURITY.md) · [License](LICENSE)
+## Contents
 
-> **Copyright © 2026 Akadil Alish. All rights reserved.** Use, modification, redistribution and deployment require prior written permission. Public visibility does not grant a reuse license. See [LICENSE](LICENSE) for the full terms and preserved rights.
+[Project overview](#project-overview) · [Problem and users](#problem-and-target-users) · [Aim and outcomes](#aim-objectives-and-expected-outcomes) · [Author and supervisor](#author-responsibilities-and-supervisor) · [Scope and status](#scope-and-current-development-status) · [Technologies](#selected-technologies) · [Documentation and evidence](#documentation-and-project-evidence) · [Run and verify](#setup-execution-and-verification) · [Submitted version](#submitted-version)
 
-## The learning experience
+## Project overview
 
-### Answer where the quiz happens
+AkadilEDU is a proposed integrated ecosystem for mathematics preparation for Kazakhstan's Unified National Testing (UNT / ҰБТ / ЕНТ). The diploma builds on an existing Web/PWA for courses and practice tests and an existing Telegram bot for quizzes, topic practice and mistake review.
 
-Scheduled questions arrive in a Telegram channel. Students answer with inline buttons and receive a private correct/incorrect alert without leaving the channel. Each question accepts one recorded answer per student.
+The diploma contribution is to connect the two learning channels, identify gaps from actual learner attempts and generate individual learning plans that refer to available material. This repository contains Telegram practice, channel quizzes, personal review, administration and the server functions that support those flows.
 
-### Turn mistakes into practice
+The [product guide](README.product.md) documents the implemented application, its workflows and operating requirements. This README presents the academic scope and evidence expected for the diploma checkpoint.
 
-When the session ends, its closing message links to a personal review in the bot. Students can inspect their answers, read explanations and practise similar published questions from the same topics. Random practice, topic navigation, statistics and language switching are also available in the private chat.
+## Problem and target users
 
-### Keep the schedule in your hands
+Learners can complete a course or a practice test without knowing which mathematics topics deserve attention next. When study material, test results and short practice sessions are split between applications, the learner also has to connect those results manually.
 
-The admin workspace controls the destination channel, language, time zone, start time, question count, intervals and final answer window. It checks the bot's channel posting permissions before enabling a campaign. Questions, topic hierarchies and users have dedicated management pages.
+The project addresses that preparation workflow by bringing evidence from both channels into a topic-level view and using it to recommend an actionable study plan. The accessibility motivation includes learners in rural areas and learners with limited financial resources who may have fewer opportunities for individual tutoring. Whether the system improves their access or learning outcomes must be established through user evidence and evaluation; universal free access is not an implemented guarantee.
 
-```mermaid
-flowchart LR
-    A[Admin schedule] --> B[Channel quiz]
-    B --> C[Answer + private alert]
-    C --> D[Session closes]
-    D --> E[Personal mistake review]
-    E --> F[Similar topic practice]
-```
-
-## Three connected workspaces
-
-| Workspace | Purpose | Implementation |
-| --- | --- | --- |
-| **Telegram bot** | Channel answers, personal review, practice and statistics | Node.js, grammY, Firebase Admin SDK |
-| **Admin Mini App** | Questions, topics, users and campaign configuration | React 19, Vite, Tailwind CSS, Framer Motion |
-| **Question Studio** | API authoring, independent review, correction, previews and costs | TypeScript, Zod, OpenAI API, KaTeX, Playwright, Sharp |
-
-The bot and question content support **Kazakh (`kk`), Russian (`ru`) and English (`en`)**. Bot interface translations live in [`bot/i18n.js`](bot/i18n.js). The admin interface is in English.
-
-## Content that students can read
-
-Every generated question contains three equivalent statements, four answer choices, a hint and an explanation. A separate review request independently solves and checks the work before publication. Rejected questions receive concrete reviewer feedback, enter a bounded repair queue and undergo another review.
-
-- **Readable mathematics.** Dense fractions, compound logarithm bases and other difficult layouts are typeset into statement images.
-- **One visual when possible.** Language-independent formulas and geometry share an image; the instruction is translated separately. Separate images are produced only when the visible content needs translation.
-- **Compact choices.** Answer options stay on one line and contain at most 64 UTF-16 characters in every language. Options, hints and explanations remain plain text.
-- **Traceable publication.** Request IDs, model identities, review findings and correction history are retained. Only accepted content is eligible for publication.
-- **Real topic coverage.** Studio reads the live topic tree, selects exact `isLast === true` leaves and excludes the `RANDOM` service node. Targets vary by topic; difficulty planning aims approximately at 25% easy, 45% medium and 30% hard.
-
-AI review reduces errors; it does not certify mathematical correctness. These are original practice materials, not official National Testing Center exam questions.
-
-## Architecture
-
-```mermaid
-flowchart TB
-    TG[Telegram] --> WH[Secret-checked webhook]
-    WH --> BOT[Bot handlers]
-    TIMER[Cloud Scheduler] --> CAM[Campaign publisher]
-    CAM --> TG
-    ADMIN[Admin Mini App / browser] --> AUTH[Telegram identity / OTP]
-    AUTH --> TOKEN[Firebase custom token]
-    TOKEN --> DATA[(Realtime Database)]
-    ADMIN --> DATA
-    BOT --> DATA
-    CAM --> DATA
-    STUDIO[Question Studio] --> API[Author + independent reviewer]
-    API --> STUDIO
-    STUDIO --> DATA
-    STUDIO --> MEDIA[(Cloud Storage)]
-    MEDIA --> TG
-```
-
-**Realtime Database is the source of truth.** It stores topics, questions, campaigns, publications and attempts. Cloud Storage holds question images. Firebase Authentication identifies administrators; Cloud Functions handle privileged authentication, webhook delivery and scheduled publication. Hosting serves the admin application.
-
-Question Studio has two execution modes: a local Node.js worker and a separate [Google Apps Script worker](question-studio/cloud/README.md). Apps Script uses resumable timed steps and has daily runtime quotas. One authoritative worker owns a run at a time.
-
-### Access and identity
-
-- Telegram Mini App sign-in verifies signed `initData` on the server.
-- Browser sign-in sends a four-digit code to the administrator's Telegram bot chat. Codes are stored as HMACs, expire and have bounded verification attempts.
-- The browser request has a cryptographic challenge; successful verification consumes it atomically.
-- **Stay logged in** uses Firebase Auth browser persistence. A saved preference alone never grants administrator privileges; membership is checked against `/admins`.
-- Realtime Database access requires both an administrator claim and an administrator record. Storage rules allow public delivery of question images; private credentials stay server-side.
-
-See [SECURITY.md](SECURITY.md) for private reporting and responsible investigation.
-
-## Repository map
-
-| Path | Contents |
+| User group | Need addressed |
 | --- | --- |
-| [`bot/`](bot/) | Telegram handlers, localization, question selection and channel scheduling |
-| [`functions/`](functions/) | Webhook, identity exchange, browser OTP and scheduled campaigns |
-| [`admin-mini-app/`](admin-mini-app/) | React administration interface |
-| [`question-studio/`](question-studio/) | Authoring/review pipeline, renderer and local browser workspace |
-| [`question-studio/cloud/`](question-studio/cloud/) | Apps Script worker, private UI and deployment tooling |
-| [`scripts/`](scripts/) | First-administrator bootstrap |
-| [`assets/brand/`](assets/brand/) | Original repository mark and cover |
-| [`database.rules.json`](database.rules.json), [`storage.rules`](storage.rules) | Client access rules |
-| [`firebase.json`](firebase.json) | Functions preparation and Hosting configuration |
+| Students preparing for UNT mathematics | Understand weak topics and decide what to study next |
+| Students with limited tutoring opportunities | Use existing digital material and regular practice with clear guidance |
+| Mathematics educators and content administrators | Maintain material and interpret progress at topic level |
 
-## Authorized development
+User interviews and other research evidence must distinguish observed needs from these initial assumptions. They are tracked in [AEDU-2](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-2).
 
-Use these steps only with the owner's permission and your own authorized service configuration. There are no default administrator credentials or bundled production datasets.
+## Aim, objectives and expected outcomes
 
-**Requirements:** Node.js 22.12 or newer in the Node.js 22 line, npm, a configured Firebase project and a Telegram bot. Studio additionally requires an API account and a supported local browser.
+**Aim:** Develop an educational ecosystem that supports UNT mathematics preparation through connected learning channels and AI-generated individual learning plans grounded in learner progress.
 
-```powershell
+The project objectives are to:
+
+1. Establish verifiable learner needs, requirements and a realistic scope.
+2. Define a consistent mathematics topic structure and a shared representation of practice results.
+3. Link Web and Telegram identities through a verified, revocable mechanism.
+4. Identify topic-level gaps from actual answers and make the evidence visible to the learner.
+5. Generate structured study steps linked to existing courses and practice material.
+6. Present and update the learner's plan across both applications.
+7. Verify the implementation and assess the usefulness of the proposed preparation workflow.
+
+| Expected outcome | Evidence of fulfilment |
+| --- | --- |
+| Connected Web and Telegram learning records | A verified linked account and consistent topic progress |
+| Explainable diagnostic priorities | Recorded attempts and a visible reason for each weak-topic priority |
+| A usable individual learning plan | Validated steps referring to resources that exist |
+| An updated preparation workflow | New practice results reflected in progress and subsequent plan steps |
+| An assessed engineering result | Recorded verification and an evaluation against a defined baseline |
+
+These are expected diploma results. No improvement in UNT scores or learning effectiveness is asserted without collected evidence.
+
+## Author, responsibilities and supervisor
+
+| Role | Person | Responsibilities |
+| --- | --- | --- |
+| Sole student author | **Akadil Alish (Әліш Ақәділ)**, **SE-2426**, [AQADIL](https://github.com/AQADIL) | Problem analysis, requirements, architecture, UI/UX, Web and Telegram development, data integration, verification, documentation and project management |
+| Scientific supervisor | **Elvira Aitmukhanbetova** | Academic supervision, review of selected significant deliverables and feedback at agreed checkpoints |
+
+This is an individual diploma project. Tasks are assigned to the student. Supervisor feedback is recorded when an actual review occurs; the supervisor is not presented as a co-developer or as having already approved unfinished materials.
+
+## Scope and current development status
+
+### Existing implementation
+
+| Component | Available implementation | Repository |
+| --- | --- | --- |
+| Web/PWA | Courses, video lessons, lesson quizzes, practice tests, results, learner accounts and content administration | [AkadilEDU](https://github.com/AQADIL/AkadilEDU) |
+| Telegram | Topic/random practice, scheduled channel quizzes, personal mistake review, statistics and administration | [AkadilEDU PRIME](https://github.com/AQADIL/AkadilEDU-PRIME) |
+| Project management | Assigned and prioritised tasks with expected outcomes, acceptance criteria and target dates | [AEDU project](https://akadiledu-diploma.youtrack.cloud/issues/AEDU) |
+
+### Planned diploma development
+
+| Work item | Current state | Task |
+| --- | --- | --- |
+| Verified account linking | Planned | [AEDU-12](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-12) |
+| Shared learning events and topic progress | Planned | [AEDU-13](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-13) |
+| AI-generated personalised learning plans | Planned | [AEDU-14](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-14) |
+| Entry diagnostic and gap explanation | Planned | [AEDU-17](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-17) |
+| Plan presentation in Web and Telegram | Planned | [AEDU-18](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-18) |
+
+### Boundaries and limitations
+
+The two applications currently have separate identity and progress records. Existing administrative AI tools assist with content workflows; they are not the proposed student learning-plan service. The diploma scope excludes the existing question-filling script and Question Studio as research contributions. Official UNT question ownership, guaranteed admission results, a new foundation model and universal offline media access are outside the stated scope.
+
+Learner records and assessment data must be handled with appropriate access controls. The AI component must handle insufficient evidence and invalid recommendations explicitly, and human review remains necessary for educational content and interpretation.
+
+## Selected technologies
+
+The following stack is present in the repositories; the integration design and model/provider choice for student plans remain subject to the technology comparison.
+
+| Area | Current technologies | Role |
+| --- | --- | --- |
+| Web/PWA | React 18, React Router, Vite 7, Tailwind CSS, i18next | Courses, assessment UI and multilingual navigation |
+| Telegram service | Node.js 22, grammY | Bot interactions, channel answers and topic practice |
+| Administration Mini App | React 19, Vite 8, Tailwind CSS | Content and campaign management |
+| Server and data | Cloud Functions, Realtime Database, Authentication, Storage | Server operations, identities, learning data and materials |
+| Verification and delivery | ESLint, Node.js tests and rule emulators in the Web repository; component lint/build commands in the bot repository; GitHub Actions for the Web project | Available checks and configured delivery |
+
+Dependency versions and scripts are defined by each component's manifests and lockfiles. The [product guide](README.product.md) gives the detailed implementation map. Technology alternatives and justification are tracked in [AEDU-5](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-5).
+
+## Documentation and project evidence
+
+The current navigation deliberately links to existing evidence or its tracked task. A task link does not mean that the corresponding academic document has been completed or approved.
+
+| Required material | Available location / next deliverable |
+| --- | --- |
+| Project title, problem, users, scope and expected outcomes | Sections above; standalone proposal tracked in [AEDU-1](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-1) |
+| Evidence of learner needs | [AEDU-2](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-2); discussion records and findings remain to be committed |
+| Literature review | [AEDU-3](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-3); critical review and source analysis table remain to be committed |
+| Comparison of existing systems | [AEDU-4](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-4); evidence-backed comparison remains to be committed |
+| Technology comparison | [AEDU-5](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-5); alternatives and decision rationale remain to be committed |
+| Requirements and acceptance criteria | [AEDU-6](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-6); system specification remains to be committed |
+| Context, use-case and component diagrams | [AEDU-7](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-7); editable sources and exports remain to be committed |
+| UX / prototype materials | [AEDU-8](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-8); integrated learner-plan flows remain to be documented |
+| Verification and evaluation plan | [AEDU-9](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-9); measures, conditions and baseline remain to be committed |
+| Responsibility, priorities, milestones and task outcomes | [YouTrack project](https://akadiledu-diploma.youtrack.cloud/issues/AEDU) and [board](https://akadiledu-diploma.youtrack.cloud/agiles/204-1/218-1) |
+| Repository preparation | [AEDU-10](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-10) |
+| Supervisor review and resulting revisions | [AEDU-11](https://akadiledu-diploma.youtrack.cloud/issue/AEDU-11); record actual feedback before closing |
+| Implementation and individual contributions | [`bot/`](bot/), [`functions/`](functions/), [`admin-mini-app/`](admin-mini-app/); [commit history](https://github.com/AQADIL/AkadilEDU-PRIME/commits/main/) |
+
+Academic material should be versioned alongside the implementation when ready. Diagrams need editable source as well as readable exports. Review comments and resulting revisions should remain traceable. The product guides and source code are not substitutes for the literature review, comparison tables or evaluation plan.
+
+## Setup, execution and verification
+
+
+### Telegram bot setup and checks
+
+Use Node.js 22.12 or later in the Node.js 22 line, npm, a Telegram bot and a Firebase environment you are authorised to operate.
+
+```sh
+git clone https://github.com/AQADIL/AkadilEDU-PRIME.git
+cd AkadilEDU-PRIME
 npm --prefix bot ci
 npm --prefix functions ci
 npm --prefix admin-mini-app ci
-npm --prefix question-studio ci
 ```
 
-Copy the relevant `.env.example` files to local `.env` files and fill in the real values. [QUICKSTART.md](QUICKSTART.md) covers authentication, secrets, administrator setup and deployment order.
+Configure the root, Functions and Mini App environment files from their respective `.env.example` templates. Keep bot tokens and signing secrets in server-side configuration or Secret Manager. Bootstrap the administrator only in your authorised environment; production identities and datasets are not included in the repository.
 
-| Configuration template | Scope |
+```sh
+npm --prefix admin-mini-app run dev
+npm --prefix admin-mini-app run lint
+npm --prefix admin-mini-app run build
+npm --prefix functions run prepare:bot
+```
+
+For local development without an active Telegram webhook, `npm --prefix bot start` uses polling. Deployed operation uses the configured webhook and scheduler. A real campaign also requires published questions and channel posting rights. There is no combined root npm test command; UI checks and manual Telegram scenarios cover different parts of the system.
+
+Follow [QUICKSTART.md](QUICKSTART.md) for complete environment, administrator, secret and deployment steps. The [product guide](README.product.md) describes additional tooling; the question-filling script and Question Studio are outside the proposed diploma scope.
+
+
+## Submitted version
+
+| Component | Version for the current form |
 | --- | --- |
-| [`.env.example`](.env.example) | Local bot, Firebase credentials, webhook and bootstrap |
-| [`functions/.env.example`](functions/.env.example) | Deployed function configuration and OTP limits |
-| [`admin-mini-app/.env.example`](admin-mini-app/.env.example) | Public browser Firebase configuration |
-| [`question-studio/.env.example`](question-studio/.env.example) | Models, prices, API budget, rendering and worker ownership |
+| Web/PWA | [prob-period-1](https://github.com/AQADIL/AkadilEDU/tree/prob-period-1) |
+| Telegram | [prob-period-1](https://github.com/AQADIL/AkadilEDU-PRIME/tree/prob-period-1) |
 
-Secrets for deployed functions belong in Secret Manager. Private API keys, bot tokens and service-account credentials must never appear in `VITE_*` values. Local environment files, Studio state, credential files and generated deployment bundles are excluded from Git.
-
-### Useful commands
-
-| Command | Purpose |
-| --- | --- |
-| `npm --prefix admin-mini-app run dev` | Start the admin development server |
-| `npm --prefix admin-mini-app run lint` | Lint the admin application |
-| `npm --prefix admin-mini-app run build` | Produce the admin Hosting bundle |
-| `npm --prefix bot start` | Run local Telegram polling, without an active webhook |
-| `npm --prefix functions run prepare:bot` | Package the current bot source for Functions |
-| `npm --prefix question-studio run check` | Type-check the local Studio |
-| `npm --prefix question-studio run cloud:check` | Type-check the Apps Script worker |
-| `npm --prefix question-studio start` | Start Studio at its configured loopback origin |
-
-There is no root npm workspace or combined root check command. Dependency versions are pinned in each component's lockfile.
-
-## Spending and recovery
-
-Studio persists a conservative reservation **before** every paid API request. Authoring, reviews, research and repairs share one run budget, with a configured maximum of **$50**. Recorded usage replaces settled reservations; uncertain charges retain their full reserve. New work is admitted only when its maximum reserved cost fits the remaining budget.
-
-Local generation supports up to 16 concurrent jobs with serialized budget admission. Known response IDs are retrieved again after connection failures. Terminal responses without usage are isolated with their reserve intact, allowing other work to continue. Content corrections and retries are bounded; authentication or inconsistent accounting can still require intervention.
-
-The API limit belongs to this Studio run. It is not an account-wide cap and does not cover Firebase charges. Apps Script runtime quotas and provider rate limits remain separate. See [Studio operations](question-studio/README.md#costs-and-recovery) for the complete behavior.
+The `prob-period-1` tags identify previously fixed snapshots. README and other changes made later on `main` are not automatically included in those snapshots. A submitted tag must remain stable, and uploaded material must correspond to the declared version. These README updates do not move the existing tags.
 
 ## Ownership
 
-Created and maintained by **[Akadil Alish · AQADIL](https://github.com/AQADIL)**.
-
-AkadilEDU PRIME's original source, documentation and brand assets are proprietary. Personal, educational and commercial reuse all require prior written permission. Third-party dependencies retain their own licenses; platform rights and existing valid grants are preserved under [LICENSE](LICENSE).
+Created and owned by **Akadil Alish**. The source and documentation are provided under the repository's proprietary [LICENSE](LICENSE). Third-party dependencies retain their respective terms. See [SECURITY.md](SECURITY.md) for private vulnerability reporting.
