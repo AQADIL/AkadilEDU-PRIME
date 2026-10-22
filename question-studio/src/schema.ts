@@ -122,6 +122,9 @@ export interface StoredQuestion {
     reviewCallId?: string;
     retryAt?: number;
     candidate?: GeneratedQuestion;
+    originalQuestion?: GeneratedQuestion;
+    databaseRevision?: number;
+    originalReviewRequired?: boolean;
     history: { attempt: number; issues: string[]; generationResponseId?: string; reviewResponseId?: string }[];
   };
   generation: {
@@ -135,6 +138,15 @@ export interface StoredQuestion {
     researchResponseId?: string;
   };
 }
+export function generatedQuestionContent(question: StoredQuestion): GeneratedQuestion {
+  const translations = Object.fromEntries(languages.map(language => {
+    const { text, options, explanation, hint } = question.translations[language];
+    return [language, { text, options, explanation, hint }];
+  }));
+  return generatedQuestionSchema.parse({ primaryTopicId: question.topic, difficulty: question.difficulty,
+    correctOption: question.correctOption, diagram: question.diagram, translations });
+}
+
 export interface Topic {
   id: string;
   name: string;

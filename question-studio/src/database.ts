@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { cert, initializeApp } from 'firebase-admin/app';
-import { getDatabase } from 'firebase-admin/database';
+import { getDatabase, type DataSnapshot, type Reference } from 'firebase-admin/database';
 import { getDownloadURL, getStorage } from 'firebase-admin/storage';
 import { randomUUID, createHash } from 'node:crypto';
 import { z } from 'zod';
@@ -13,6 +13,20 @@ const account = JSON.parse(await readFile(config.credentials, 'utf8')) as object
 const app = initializeApp({ credential: cert(account), databaseURL: config.databaseURL, storageBucket: config.storageBucket }, 'question-studio');
 export const db = getDatabase(app);
 const topicRecord = z.object({ name: z.string().min(1), parentId: z.string().nullable().optional(), isLast: z.boolean() }).passthrough();
+export class QuestionConflictError extends Error {}
+
+export async function updateQuestionAtomically(reference: Reference, update: (current: unknown) => unknown): Promise<Awaited<ReturnType<Reference['transaction']>>> {
+  let retain: ((snapshot: DataSnapshot) => void) | undefined;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      retain = () => resolve();
+      reference.on('value', retain, reject);
+    });
+    return await reference.transaction(update, undefined, false);
+  } finally {
+    if (retain) reference.off('value', retain);
+  }
+}
 
 export async function loadTopics() {
   const snapshot = await db.ref('topics').get();
@@ -50,6 +64,10 @@ export async function saveQuestionToDatabase(question: StoredQuestion) {
   if (topic.val()?.isLast !== true) throw new Error(`Topic is no longer a leaf: ${question.topic}`);
   const reference = db.ref(`questions/${question.id}`);
   const existing = await reference.get();
+  if (question.repair?.status === 'running' && question.repair.databaseRevision !== undefined
+    && existing.child('updatedAt').val() !== question.repair.databaseRevision) {
+    throw new QuestionConflictError('Задание изменено вне студии во время исправления; автоматическая замена остановлена.');
+  }
   if (existing.exists() && existing.val()?.generation?.runId !== question.generation.runId) {
     throw new Error('Question ID belongs to a different generation run');
   }
@@ -57,14 +75,24 @@ export async function saveQuestionToDatabase(question: StoredQuestion) {
     const { localImageUrl: _local, displayText, ...content } = question.translations[lang];
     return [lang, { ...content, text: displayText ?? content.text }];
   }));
-  await reference.update({
+  const content = {
     ...translations.kk, localImageUrl: null, translations,
     topic: question.topic, difficulty: question.difficulty, correctOption: question.correctOption,
     status: question.status === 'published' ? 'published' : 'draft',
     schemaVersion: 2, diagram: question.diagram, validation: question.validation,
     generation: question.generation, fingerprint: question.fingerprint,
     createdAt: existing.val()?.createdAt || question.generation.createdAt, updatedAt: Date.now(),
-  });
+  };
+  if (question.repair?.status === 'running' && question.repair.databaseRevision !== undefined) {
+    const revision = question.repair.databaseRevision;
+    const result = await updateQuestionAtomically(reference, current => {
+      if (!current || typeof current !== 'object' || Array.isArray(current)) return;
+      const record = current as Record<string, unknown>;
+      if (record.updatedAt !== revision) return;
+      return { ...record, ...content };
+    });
+    if (!result.committed) throw new QuestionConflictError('Задание изменено во время сохранения; правка администратора сохранена.');
+  } else await reference.update(content);
   await db.ref(`questionsByTopic/${question.topic}/${question.id}`).set(true);
 }
 

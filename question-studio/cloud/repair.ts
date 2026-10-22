@@ -2,19 +2,11 @@ import { z } from 'zod';
 import { config } from './config.js';
 import { state, save, event, safeError } from './store.js';
 import { runStructured, RecoverableApiError, RequestPausedError } from './provider.js';
-import { generatedQuestionSchema, reviewSchema, languages, type GeneratedQuestion, type StoredQuestion } from '../src/schema.js';
+import { generatedQuestionSchema, generatedQuestionContent as questionInput, reviewSchema, type StoredQuestion } from '../src/schema.js';
 import { repairPrompt, reviewPrompt } from '../src/prompts.js';
 import { assessQuestion, cloudNotation, BatchContentError, publishValidatedQuestion, questionFingerprint } from './assessment.js';
 
 const repairSchema = z.strictObject({ question: generatedQuestionSchema });
-function questionInput(question: StoredQuestion): GeneratedQuestion {
-  const translations = Object.fromEntries(languages.map(language => {
-    const { text, options, explanation, hint } = question.translations[language];
-    return [language, { text, options, explanation, hint }];
-  }));
-  return generatedQuestionSchema.parse({ primaryTopicId: question.topic, difficulty: question.difficulty,
-    correctOption: question.correctOption, diagram: question.diagram, translations });
-}
 export function nextRepair(): StoredQuestion | undefined {
   return state.questions.find(question => !question.validation.passed
     && (!state.selectedTopicIds.length || state.selectedTopicIds.includes(question.topic))
@@ -22,11 +14,12 @@ export function nextRepair(): StoredQuestion | undefined {
     && question.repair?.status !== 'exhausted' && question.repair?.status !== 'completed'
     && (question.repair?.status === 'running' || (question.repair?.attempts || 0) < config.repairMaxAttempts));
 }
-export function repairQuestion(question: StoredQuestion, shouldPause: () => boolean) {
+export function repairQuestion(question: StoredQuestion, shouldPause: () => boolean): void {
   question.repair ??= { attempts: 0, status: 'pending', history: [{ attempt: 0,
     issues: [...question.validation.issues], generationResponseId: question.generation.responseId,
     reviewResponseId: question.generation.reviewResponseId }] };
   const repair = question.repair;
+  if (!repair.originalQuestion) { repair.originalQuestion = questionInput(question); save(); }
   if (repair.status !== 'running') {
     if (shouldPause()) throw new RequestPausedError();
     repair.attempts += 1;
@@ -38,7 +31,7 @@ export function repairQuestion(question: StoredQuestion, shouldPause: () => bool
     if (!repair.candidate) {
       event(`Исправление ${question.id.slice(0, 8)}: попытка ${repair.attempts}/${config.repairMaxAttempts}, замечания переданы ${config.model}.`, 'info', question.topic);
       const result = runStructured('repair', repairPrompt + cloudNotation,  {
-        question: questionInput(question), topic: { id: topic.id, path: topic.path },
+        question: questionInput(question), originalQuestion: repair.originalQuestion, topic: { id: topic.id, path: topic.path },
         feedback: question.validation.issues, previousAttempts: repair.history.map(item => ({ attempt: item.attempt, issues: item.issues })),
         history: state.questions.filter(item => item.id !== question.id && item.topic === question.topic && item.validation.passed)
           .slice(-40).map(item => item.translations.kk.text),
@@ -56,12 +49,20 @@ export function repairQuestion(question: StoredQuestion, shouldPause: () => bool
     if (shouldPause()) throw new RequestPausedError();
     const candidate = repair.candidate;
     const { correctOption: _answer, ...reviewInput } = candidate;
+    const { correctOption: _originalAnswer, ...originalQuestion } = repair.originalQuestion;
     event(`Повторная проверка ${question.id.slice(0, 8)}: ${config.reviewModel}.`, 'info', question.topic);
     const reviewed = runStructured('review', reviewPrompt, {
+      originalQuestion, changesRequested: question.validation.issues,
       questions: [{ ...reviewInput, index: 0 }], topics: [{ id: topic.id, path: topic.path }],
       history: state.questions.filter(item => item.id !== question.id && item.topic === question.topic && item.validation.passed)
         .slice(-40).map(item => item.translations.kk.text),
     }, reviewSchema, id => { repair.reviewCallId = id; }, repair.reviewCallId, shouldPause);
+    if (repair.originalReviewRequired) {
+      delete repair.reviewCallId;
+      delete repair.originalReviewRequired;
+      save();
+      return repairQuestion(question, shouldPause);
+    }
     if (reviewed.data.reviews.length !== 1 || reviewed.data.reviews[0]!.index !== 0) {
       throw new BatchContentError('Проверка исправления вернула неверное соответствие заданию');
     }
