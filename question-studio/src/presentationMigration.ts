@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db, updateQuestionAtomically } from './database.js';
 import { config } from './config.js';
 import { state, event, save } from './store.js';
-import { generatedQuestionSchema, generatedQuestionContent, languages, type GeneratedQuestion, type StoredQuestion } from './schema.js';
+import { restoreGeneratedQuestion, generatedQuestionContent, languages, type GeneratedQuestion, type StoredQuestion } from './schema.js';
 import { questionPresentationIssues } from './questionPresentation.js';
 import { statementPresentation } from './statementPresentation.js';
 
@@ -49,8 +49,7 @@ function recoverOriginal(question: StoredQuestion, responseId: string): Generate
   const candidate = call.kind === 'repair' ? result.question : Array.isArray(result.questions)
     ? result.questions.find((_, index) => createHash('sha256').update(`${question.generation.runId}:${responseId}:${index}`).digest('hex').slice(0, 40) === question.id)
     : undefined;
-  const parsed = generatedQuestionSchema.safeParse(candidate);
-  return parsed.success ? parsed.data : undefined;
+  try { return restoreGeneratedQuestion(candidate); } catch { return; }
 }
 
 export async function queuePresentationRepairs(): Promise<void> {
@@ -65,6 +64,9 @@ export async function queuePresentationRepairs(): Promise<void> {
     }
     const baseline = repair.history.findLast(entry => entry.attempt === 0 && entry.issues.some(issue => presentationIssue.test(issue)));
     if (!baseline?.generationResponseId) continue;
+    const blockedByRestore = repair.status === 'exhausted' && state.events.some(entry =>
+      entry.message === `Исходник ${question.id.slice(0, 8)} не найден в сохранённых ответах; автоматическая замена пропущена.`);
+    const reviewNeedsOriginal = repair.attempts > 1 && Boolean(repair.reviewCallId);
     const original = recoverOriginal(question, baseline.generationResponseId);
     if (!original) {
       repair.status = 'exhausted';
@@ -79,12 +81,18 @@ export async function queuePresentationRepairs(): Promise<void> {
     else if (repair.status !== 'completed') {
       const stored = snapshot.child(question.id).val() as unknown;
       const parsed = recordSchema.safeParse(stored);
-      if (parsed.success && matchesSource(stored, original)) repair.databaseRevision = parsed.data.updatedAt;
+      if (parsed.success && matchesSource(stored, original)) {
+        repair.databaseRevision = parsed.data.updatedAt;
+        if (blockedByRestore) {
+          repair.status = 'pending';
+          repair.attempts = 0;
+        }
+      }
       else {
         repair.status = 'exhausted';
         await event(`Задание ${question.id.slice(0, 8)} изменено вне студии или удалено; автоматическая замена пропущена.`, 'warning', question.topic);
       }
-      if (repair.attempts > 1 && repair.reviewCallId) repair.originalReviewRequired = true;
+      if (reviewNeedsOriginal) repair.originalReviewRequired = true;
     }
   }
   await save();

@@ -43,6 +43,13 @@ export const generatedQuestionSchema = z.strictObject({
   diagram: diagramSchema.nullable(),
 });
 export type GeneratedQuestion = z.infer<typeof generatedQuestionSchema>;
+const persistedGeneratedQuestionSchema = generatedQuestionSchema.extend({
+  translations: z.strictObject({ kk: translationSchema.strip(), ru: translationSchema.strip(), en: translationSchema.strip() }),
+  diagram: diagramSchema.extend({ arcs: diagramSchema.shape.arcs.default([]), angles: diagramSchema.shape.angles.default([]) }).nullable(),
+});
+export function restoreGeneratedQuestion(value: unknown): GeneratedQuestion {
+  return persistedGeneratedQuestionSchema.parse(value);
+}
 export const generationSchema = z.strictObject({
   recommendedTarget: z.number().int().min(8).max(40),
   rationale: z.string().min(1).max(600),
@@ -51,7 +58,7 @@ export const generationSchema = z.strictObject({
   questions: z.array(generatedQuestionSchema).max(5),
 });
 export const pendingBatchSchema = z.strictObject({
-  questions: z.array(generatedQuestionSchema).max(5),
+  questions: z.array(persistedGeneratedQuestionSchema).max(5),
   generationCallId: z.uuid(),
   reviewCallId: z.uuid().optional(),
   sourceEnd: z.number().int().nonnegative().optional(),

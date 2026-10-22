@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { config } from './config.js';
 import { state, save, event, safeError } from './store.js';
 import { runStructured, RecoverableApiError, RequestPausedError } from './provider.js';
-import { generatedQuestionSchema, generatedQuestionContent as questionInput, reviewSchema, type StoredQuestion } from '../src/schema.js';
+import { generatedQuestionSchema, generatedQuestionContent as questionInput, restoreGeneratedQuestion, reviewSchema, type StoredQuestion } from '../src/schema.js';
 import { repairPrompt, reviewPrompt } from '../src/prompts.js';
 import { assessQuestion, cloudNotation, BatchContentError, publishValidatedQuestion, questionFingerprint } from './assessment.js';
 
@@ -68,9 +68,10 @@ export function repairQuestion(question: StoredQuestion, shouldPause: () => bool
     }
     const generation = state.calls.find(call => call.id === repair.generationCallId)!;
     const issues = assessQuestion(candidate, reviewed.data.reviews[0]!, question.topic, question.id);
+    const content = restoreGeneratedQuestion(candidate);
     const corrected: StoredQuestion = {
       ...question, difficulty: candidate.difficulty, correctOption: candidate.correctOption,
-      translations: candidate.translations, diagram: candidate.diagram, fingerprint: questionFingerprint(candidate),
+      translations: content.translations, diagram: content.diagram, fingerprint: questionFingerprint(candidate),
       validation: { passed: issues.length === 0, issues }, status: issues.length ? 'rejected' : 'draft',
       generation: { ...question.generation, model: generation.model, responseId: generation.responseId!,
         reviewModel: reviewed.model, reviewResponseId: reviewed.responseId },

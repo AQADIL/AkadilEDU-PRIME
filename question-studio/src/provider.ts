@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { config } from './config.js';
 import { state, save, event } from './store.js';
 import type { ApiCall, ModelPrices, ReferenceSource } from './schema.js';
-import { assertSettledCallWithinReservation, calculateUsageCost, exceededWebSearchLimit, usageSchema } from './schema.js';
+import { assertSettledCallWithinReservation, calculateUsageCost, exceededWebSearchLimit, restoreGeneratedQuestion, usageSchema } from './schema.js';
 
 const responseSchema = z.object({
   id: z.string(),
@@ -103,23 +103,24 @@ function admitRequest<T>(operation: () => Promise<T>): Promise<T> {
 }
 
 function normalizeGenerationResult(kind: ApiCall['kind'], value: unknown): unknown {
-  if (kind !== 'generation' || !value || typeof value !== 'object' || Array.isArray(value)) return value;
+  if ((kind !== 'generation' && kind !== 'repair') || !value || typeof value !== 'object' || Array.isArray(value)) return value;
   const result = value as Record<string, unknown>;
-  if (!Array.isArray(result.questions)) return value;
-  return {
-    ...result,
-    questions: result.questions.map((question: unknown) => {
-      if (!question || typeof question !== 'object' || Array.isArray(question)) return question;
-      const record = question as Record<string, unknown>;
-      if (!record.diagram || typeof record.diagram !== 'object' || Array.isArray(record.diagram)) return question;
-      const diagram = record.diagram as Record<string, unknown>;
-      return { ...record, diagram: {
-        ...diagram,
-        ...(!Object.hasOwn(diagram, 'arcs') ? { arcs: [] } : {}),
-        ...(!Object.hasOwn(diagram, 'angles') ? { angles: [] } : {}),
-      } };
-    }),
+  const normalizeQuestion = (question: unknown): unknown => {
+    if (!question || typeof question !== 'object' || Array.isArray(question)) return question;
+    const record = question as Record<string, unknown>;
+    const diagram = record.diagram && typeof record.diagram === 'object' && !Array.isArray(record.diagram)
+      ? record.diagram as Record<string, unknown> : undefined;
+    const normalized = diagram ? { ...record, diagram: {
+      ...diagram,
+      ...(!Object.hasOwn(diagram, 'arcs') ? { arcs: [] } : {}),
+      ...(!Object.hasOwn(diagram, 'angles') ? { angles: [] } : {}),
+    } } : question;
+    try { return restoreGeneratedQuestion(normalized); }
+    catch { return normalized; }
   };
+  if (kind === 'repair') return { ...result, question: normalizeQuestion(result.question) };
+  return Array.isArray(result.questions)
+    ? { ...result, questions: result.questions.map(normalizeQuestion) } : value;
 }
 
 export function estimateReservation(instructions: string, input: string, schema: object, kind: ApiCall['kind'] = 'generation',

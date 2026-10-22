@@ -3,7 +3,7 @@ import { config } from './config.js';
 import { state, event, save, safeError } from './store.js';
 import { runStructured, BudgetError, RecoverableApiError, RequestPausedError, CloudYieldError, sha256 } from './provider.js';
 import { generationPrompt, reviewPrompt } from '../src/prompts.js';
-import { generationSchema, reviewSchema, languages, difficulties, type Difficulty, type StoredQuestion, type Topic } from '../src/schema.js';
+import { generationSchema, reviewSchema, languages, difficulties, restoreGeneratedQuestion, type Difficulty, type StoredQuestion, type Topic } from '../src/schema.js';
 import { saveQuestionToDatabase, uploadImage } from './database.js';
 import { renderQuestion } from './render.js';
 import { researchTopic } from './research.js';
@@ -143,9 +143,10 @@ function processBatch() {
     const verdict = review.data.reviews.find(v => v.index === index)!;
     const issues = assessQuestion(generated, verdict, state.mode === 'generate' ? state.activeTopicId! : undefined);
     const fingerprint = questionFingerprint(generated);
+    const content = restoreGeneratedQuestion(generated);
     const question: StoredQuestion = {
       id, topic: generated.primaryTopicId, difficulty: generated.difficulty, correctOption: generated.correctOption,
-      translations: generated.translations, diagram: generated.diagram, fingerprint,
+      translations: content.translations, diagram: content.diagram, fingerprint,
       status: issues.length ? 'rejected' : 'draft', validation: { passed: issues.length === 0, issues },
       generation: { model: generationCall.model, reviewModel: review.model,
         responseId: generationCall.responseId!, reviewResponseId: review.responseId,
@@ -225,8 +226,9 @@ export function runWorkerStep() {
         for (const [index, generated] of batch.questions.entries()) {
           const id = hash(`${state.runId}:${generation.responseId}:${index}`).slice(0, 40);
           if (state.questions.some(question => question.id === id)) continue;
+          const content = restoreGeneratedQuestion(generated);
           state.questions.push({ id, topic: generated.primaryTopicId, difficulty: generated.difficulty,
-            correctOption: generated.correctOption, translations: generated.translations, diagram: generated.diagram,
+            correctOption: generated.correctOption, translations: content.translations, diagram: content.diagram,
             fingerprint: questionFingerprint(generated), status: 'rejected',
             validation: { passed: false, issues: [`Проверка не завершена: ${safeError(error)}`] },
             generation: { model: generation.model, responseId: generation.responseId!,
