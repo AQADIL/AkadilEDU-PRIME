@@ -1,6 +1,6 @@
 # Authorized setup
 
-These instructions are for the owner and expressly authorized operators. See [LICENSE](LICENSE) before using the source. The product overview is in [README.md](README.md).
+These instructions are for the owner and expressly authorized operators. See [LICENSE](LICENSE) before using the source. The product overview is in [README.product.md](README.product.md); [README.md](README.md) covers the diploma project.
 
 ## 1. Install and configure
 
