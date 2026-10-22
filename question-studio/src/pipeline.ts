@@ -175,17 +175,21 @@ export async function runParallelPipeline(handlers: PipelineHandlers, pauseReque
           continue;
         }
         const activeRepairs = [...active.keys()].filter(id => id.startsWith('repair:')).length;
+        const outstandingQuestions = state.jobs!.filter(job => job.topicId === topic.id).reduce((sum, job) => sum + job.count, 0);
+        const remaining = topic.target - topic.generated - outstandingQuestions - activeRepairs;
         const activeRepairIds = new Set([...active.keys()].filter(id => id.startsWith('repair:')).map(id => id.slice('repair:'.length)));
-        const repair = topic.generated < topic.target && activeRepairs < config.repairConcurrency
+        const repair = remaining > 0 && activeRepairs < config.repairConcurrency
           ? nextRepair(excludedTopics, Date.now(), activeRepairIds) : undefined;
         if (repair) {
           launch(`repair:${repair.id}`, repair.topic, () => repairQuestion(repair, shouldPause), undefined, repair);
           continue;
         }
-        if (topic.generated >= topic.target || state.jobs!.some(job => job.topicId === topic.id)) break;
-        const count = Math.min(state.config.batchSize, topic.target - topic.generated);
+        if (remaining <= 0 || (!topic.targetPlanned && state.jobs!.some(job => job.topicId === topic.id))) break;
+        const count = Math.min(state.config.batchSize, remaining);
+        const goals = topic.progress?.missingSkills?.length ? topic.progress.missingSkills : topic.coverageGoals ?? [];
         const job: GenerationJob = { id: randomUUID(), topicId: topic.id, count,
-          difficultyPlan: planDifficulty(count, topic.id), stage: 'generation' };
+          difficultyPlan: planDifficulty(count, topic.id), stage: 'generation',
+          coverageFocus: goals[state.jobs!.filter(job => job.topicId === topic.id).length % goals.length] };
         state.jobs!.push(job);
         await save();
       }

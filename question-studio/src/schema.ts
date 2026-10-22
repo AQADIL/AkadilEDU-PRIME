@@ -65,6 +65,7 @@ export const pendingBatchSchema = z.strictObject({
   sourceEnd: z.number().int().nonnegative().optional(),
 });
 export const generationJobSchema = z.strictObject({
+  coverageFocus: z.string().min(1).max(300).optional(),
   id: z.uuid(),
   topicId: z.string().regex(/^[A-Za-z0-9_-]{1,80}$/),
   count: z.number().int().min(1).max(5),
@@ -178,6 +179,7 @@ export interface Topic {
     coveredGoals?: { goalId: string; questionIds: string[] }[];
     checkedQuestionIds?: string[];
     completedAt?: number;
+    coverageChecks?: number;
     audit?: { callId?: string; fingerprint: string; input: {
       topic: { id: string; path: string[]; goals: { id: string; description: string }[] };
       questions: { id: string; difficulty: Difficulty; text: string; options: string[]; explanation: string }[];

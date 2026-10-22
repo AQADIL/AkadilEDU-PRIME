@@ -83,6 +83,9 @@ async function generateBatch(topic: Topic, job?: GenerationJob, shouldPause: () 
     count, difficultyPlan: plan, difficultyWeights: state.config.difficultyWeights,
     questionCountLimits: { minimum: config.minTopicQuestions, maximum: config.maxTopicQuestions },
     missingSkills: topic.progress?.missingSkills ?? [],
+    parallelAssignment: job ? { id: job.id, focus: job.coverageFocus,
+      otherAssignments: (state.jobs ?? []).filter(item => item.id !== job.id && item.topicId === topic.id)
+        .map(item => ({ id: item.id, focus: item.coverageFocus, difficultyPlan: item.difficultyPlan })) } : undefined,
     previousQuestions: state.questions.filter(q => q.topic === topic.id).slice(-40).map(q => q.translations.kk.text),
     previousFeedback: state.questions.filter(q => q.topic === topic.id && !q.validation.passed).slice(-5)
       .map(q => ({ difficulty: q.difficulty, issues: q.validation.issues })),

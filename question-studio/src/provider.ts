@@ -232,7 +232,7 @@ export async function reconcileUncertainResponses(shouldPause: () => boolean): P
 
 export async function runStructured<T>(kind: ApiCall['kind'], instructions: string, input: object,
   schema: z.ZodType<T>, onReserved: (id: string) => void, existingCallId?: string,
-  shouldPause?: () => boolean): Promise<{
+  shouldPause?: () => boolean, options?: { reasoningEffort: typeof config.reasoningEffort; maxOutputTokens: number }): Promise<{
     data: T; responseId: string; callId: string; model: string;
     sources: ReferenceSource[]; webSearchCalls: number; webToolCalls: number;
   }> {
@@ -283,7 +283,7 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       if (kind === 'research' && webSearchOverrun) {
         throw new RecoverableApiError(previous?.id ?? webSearchOverrun.id, 'web_search_disabled_after_overrun');
       }
-      const previousLimit = previous?.maxOutputTokens ?? config.maxOutputTokens;
+      const previousLimit = previous?.maxOutputTokens ?? options?.maxOutputTokens ?? config.maxOutputTokens;
       const maxOutputTokens = previous?.terminalReason === 'max_output_tokens'
         ? Math.min(config.retryMaxOutputTokens, Math.max(previousLimit + 1, previousLimit * 2))
         : previousLimit;
@@ -367,8 +367,8 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       try {
         const created = await request('/responses', {
           model: call.model, service_tier: call.serviceTier, instructions, input: inputText,
-          reasoning: { effort: kind === 'review' ? config.reviewReasoningEffort
-            : kind === 'research' ? config.researchReasoningEffort : config.generationReasoningEffort },
+          reasoning: { effort: options?.reasoningEffort ?? (kind === 'review' ? config.reviewReasoningEffort
+            : kind === 'research' ? config.researchReasoningEffort : config.generationReasoningEffort) },
           text: { format: { type: 'json_schema', name: kind, strict: true, schema: jsonSchema } },
           max_output_tokens: maxOutputTokens, background: true, store: true,
           ...(kind === 'research' ? {
