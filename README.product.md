@@ -1,22 +1,26 @@
 <p align="center">
-  <img src="assets/brand/cover.svg" alt="AkadilEDU PRIME — Practice. Understand. Progress. Mathematics practice in Kazakh, Russian and English." width="100%">
+  <a href="https://github.com/AQADIL/AkadilEDU-PRIME">
+    <img src="admin-mini-app/public/prime.png" alt="AkadilEDU PRIME logo" width="180">
+  </a>
 </p>
 
-# AkadilEDU PRIME
+<h1 align="center">AkadilEDU PRIME</h1>
+
+<p align="center">
+  <strong>Learn here. Prove yourself anywhere.</strong>
+</p>
 
 **A Telegram learning loop for UNT mathematics: answer in the channel, understand your mistakes, practise what you need.**
 
 Daily quizzes, personal review and topic practice connect to one question bank. Administrators manage the content and schedule through a browser or Telegram Mini App. A separate Question Studio creates, checks and repairs multilingual practice material through the API.
 
-[Diploma project](README.md) · [Admin workspace](https://akadiledu-bot.web.app/) · [Setup](QUICKSTART.md) · [Question Studio](question-studio/README.md) · [Security](SECURITY.md) · [License](LICENSE)
+[Admin workspace](https://akadiledu-bot.web.app/) · [Setup](QUICKSTART.md) · [Question Studio](question-studio/README.md) · [Security](SECURITY.md) · [License](LICENSE)
 
-> **Copyright © 2026 Akadil Alish. All rights reserved.** Use, modification, redistribution and deployment require prior written permission. Public visibility does not grant a reuse license. See [LICENSE](LICENSE) for the full terms and preserved rights.
+> **Intellectual property - all rights reserved.** Copyright © 2026 Akadil Alish. The original source code, documentation and brand assets are proprietary. Use, copying, modification, redistribution and deployment require prior written permission, subject to the exceptions and preserved rights in [LICENSE](LICENSE). Public repository visibility does not grant a reuse licence.
 
 ## Explore this guide
 
 [Learning experience](#the-learning-experience) · [Workspaces](#three-connected-workspaces) · [Content quality](#content-that-students-can-read) · [Architecture](#architecture) · [Repository map](#repository-map) · [Development](#authorized-development) · [Recovery](#spending-and-recovery) · [Ecosystem](#place-in-the-akadiledu-ecosystem)
-
-This is the product guide. The [main README](README.md) describes the diploma, the author and supervisor, current integration limits and academic deliverables. The authoring tools documented here are separate from the diploma's planned learner-facing AI service.
 
 ## The learning experience
 
@@ -65,6 +69,9 @@ AI review reduces errors; it does not certify mathematical correctness. These ar
 
 ## Architecture
 
+<details>
+<summary><strong>Architecture, data services and administrator identity</strong></summary>
+
 ```mermaid
 flowchart TB
     TG[Telegram] --> WH[Secret-checked webhook]
@@ -98,7 +105,12 @@ Question Studio has two execution modes: a local Node.js worker and a separate [
 
 See [SECURITY.md](SECURITY.md) for private reporting and responsible investigation.
 
+</details>
+
 ## Repository map
+
+<details>
+<summary><strong>Browse source directories and configuration files</strong></summary>
 
 | Path | Contents |
 | --- | --- |
@@ -108,11 +120,16 @@ See [SECURITY.md](SECURITY.md) for private reporting and responsible investigati
 | [`question-studio/`](question-studio/) | Authoring/review pipeline, renderer and local browser workspace |
 | [`question-studio/cloud/`](question-studio/cloud/) | Apps Script worker, private UI and deployment tooling |
 | [`scripts/`](scripts/) | First-administrator bootstrap |
-| [`assets/brand/`](assets/brand/) | Original repository mark and cover |
+| [`admin-mini-app/public/prime.png`](admin-mini-app/public/prime.png) | Original AkadilEDU PRIME logo |
 | [`database.rules.json`](database.rules.json), [`storage.rules`](storage.rules) | Client access rules |
 | [`firebase.json`](firebase.json) | Functions preparation and Hosting configuration |
 
+</details>
+
 ## Authorized development
+
+<details>
+<summary><strong>Installation, environment templates and useful commands</strong></summary>
 
 Use these steps only with the owner's permission and your own authorized service configuration. There are no default administrator credentials or bundled production datasets.
 
@@ -151,13 +168,20 @@ Secrets for deployed functions belong in Secret Manager. Private API keys, bot t
 
 There is no root npm workspace or combined root check command. Dependency versions are pinned in each component's lockfile.
 
+</details>
+
 ## Spending and recovery
+
+<details>
+<summary><strong>Content-tool budgets, worker limits and recovery behaviour</strong></summary>
 
 Studio persists a conservative reservation **before** every paid API request. Authoring, reviews, research and repairs share one run budget, with a configured maximum of **$50**. Recorded usage replaces settled reservations; uncertain charges retain their full reserve. New work is admitted only when its maximum reserved cost fits the remaining budget.
 
 Local generation supports up to 16 concurrent jobs with serialized budget admission. Known response IDs are retrieved again after connection failures. Terminal responses without usage are isolated with their reserve intact, allowing other work to continue. Content corrections and retries are bounded; authentication or inconsistent accounting can still require intervention.
 
 The API limit belongs to this Studio run. It is not an account-wide cap and does not cover Firebase charges. Apps Script runtime quotas and provider rate limits remain separate. See [Studio operations](question-studio/README.md#costs-and-recovery) for the complete behavior.
+
+</details>
 
 ## Place in the AkadilEDU ecosystem
 
@@ -166,9 +190,12 @@ The API limit belongs to this Studio run. It is not an account-wide cap and does
 | AkadilEDU Web/PWA | Video courses, structured lessons and practice tests | [Web product guide](https://github.com/AQADIL/AkadilEDU/blob/main/README.product.md) |
 | AkadilEDU PRIME | Telegram quizzes, personal review and short topic practice | This repository |
 
-Students currently use the two applications through their respective account and progress systems. Verified identity linking, shared topic progress and AI-generated individual learning plans are planned diploma work. Question Studio produces and reviews content; it does not currently generate a learner's individual study plan.
+Students currently use the two applications through their respective account and progress systems. Verified identity linking, shared topic progress and AI-generated individual learning plans are planned product integrations. Question Studio produces and reviews content; it does not currently generate a learner's individual study plan.
 
 ## Operational checks
+
+<details>
+<summary><strong>Checklist for verifying an authorised Telegram campaign</strong></summary>
 
 Before enabling a real campaign, verify the configured environment with a channel you are authorised to use:
 
@@ -180,7 +207,11 @@ Before enabling a real campaign, verify the configured environment with a channe
 
 These are operator verification steps, not a claim that every deployment or every question has passed review. Source lint, type checks and builds do not replace a connected Telegram campaign check.
 
+</details>
+
 ## Ownership
+
+**The original AkadilEDU PRIME source, documentation and brand assets are the intellectual property of Akadil Alish.**
 
 Created and maintained by **[Akadil Alish · AQADIL](https://github.com/AQADIL)**.
 
