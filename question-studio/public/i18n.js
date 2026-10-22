@@ -6,7 +6,7 @@ const messages = {
     workspace: 'Создание заданий', review: 'Просмотр заданий', activity: 'Ход работы',
     connection: 'Подключение к студии…', connected: 'Подключено', reconnect: 'Связь прервана. Повтор через {seconds} с.',
     idle: 'Готово к запуску', running: 'В работе', paused: 'На паузе', error: 'Остановлено из-за ошибки',
-    budget_exhausted: 'Бюджет исчерпан', completed: 'Работа завершена', model: 'Модель',
+    budget_exhausted: 'Недостаточно свободного бюджета', completed: 'Работа завершена', model: 'Модель',
     modelPair: 'Создание: {generation} · Проверка: {review}',
     parallelWork: 'Параллельная работа', parallelSummary: 'Тем одновременно: {concurrency} · Запросов: {requests}',
     parallel_research: 'Поиск источников', parallel_generation: 'Создание', parallel_review: 'Проверка',

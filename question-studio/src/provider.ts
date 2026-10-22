@@ -325,12 +325,26 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
         if (kind === 'research' && overrun) {
           throw new RecoverableApiError(previous?.id ?? overrun.id, 'web_search_disabled_after_overrun');
         }
-        const spent = state.calls.reduce((sum, item) => sum + item.cost, 0);
-        const held = state.calls.filter(item => item.status !== 'settled').reduce((sum, item) => sum + item.reserved, 0);
         if (!Number.isFinite(state.budget.limit) || state.budget.limit <= 0
-          || !Number.isFinite(reserved) || reserved <= 0
-          || spent + held + reserved > state.budget.limit) {
-          throw new BudgetError('Оставшегося бюджета недостаточно для безопасного резерва следующего запроса.');
+          || !Number.isFinite(reserved) || reserved <= 0) {
+          throw new Error('Invalid API budget configuration; paid requests are stopped');
+        }
+        let waitingForBudget = false;
+        for (;;) {
+          if (shouldPause?.()) throw new RequestPausedError('Пауза запрошена во время ожидания свободного бюджета.');
+          const spent = state.calls.reduce((sum, item) => sum + item.cost, 0);
+          const held = state.calls.filter(item => item.status !== 'settled').reduce((sum, item) => sum + item.reserved, 0);
+          if (spent + held + reserved <= state.budget.limit) break;
+          const inFlight = state.calls.some(item => item.status === 'pending'
+            || (item.status === 'reserved' && activeCreations.has(item.id)));
+          if (!inFlight) {
+            throw new BudgetError(`Недостаточно свободного бюджета: потрачено $${spent.toFixed(2)}, резерв $${held.toFixed(2)}, следующий запрос до $${reserved.toFixed(2)}, лимит $${state.budget.limit.toFixed(2)}.`);
+          }
+          if (!waitingForBudget) {
+            waitingForBudget = true;
+            await event('Ожидаю завершения оплачиваемых запросов и освобождения их резервов. Лимит бюджета сохранён.', 'info');
+          }
+          await delay(250);
         }
         activeCreations.add(candidate.id);
         state.calls.push(candidate);
