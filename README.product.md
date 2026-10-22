@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/AQADIL/AkadilEDU-PRIME">
-    <img src="admin-mini-app/public/prime.png" alt="AkadilEDU PRIME logo" width="180">
+    <img src="assets/brand/prime-transparent.png" alt="AkadilEDU PRIME logo" width="180">
   </a>
 </p>
 
@@ -120,7 +120,7 @@ See [SECURITY.md](SECURITY.md) for private reporting and responsible investigati
 | [`question-studio/`](question-studio/) | Authoring/review pipeline, renderer and local browser workspace |
 | [`question-studio/cloud/`](question-studio/cloud/) | Apps Script worker, private UI and deployment tooling |
 | [`scripts/`](scripts/) | First-administrator bootstrap |
-| [`admin-mini-app/public/prime.png`](admin-mini-app/public/prime.png) | Original AkadilEDU PRIME logo |
+| [`assets/brand/prime-transparent.png`](assets/brand/prime-transparent.png) | AkadilEDU PRIME logo with a transparent background |
 | [`database.rules.json`](database.rules.json), [`storage.rules`](storage.rules) | Client access rules |
 | [`firebase.json`](firebase.json) | Functions preparation and Hosting configuration |
 
