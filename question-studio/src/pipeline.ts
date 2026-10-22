@@ -162,7 +162,12 @@ export async function runParallelPipeline(handlers: PipelineHandlers, pauseReque
   state.error = null;
   try {
     await migrateSerialWork();
-    await auditExistingTopics(shouldPause);
+    const savedTopic = state.jobs!.map(job => state.topics.find(topic => topic.id === job.topicId))
+      .find((topic): topic is Topic => Boolean(topic && availableTopic(topic)));
+    if (savedTopic) state.activeTopicId = savedTopic.id;
+    if (!state.jobs!.length && !state.topics.some(topic => availableTopic(topic) && topic.generated < topic.target)) {
+      await auditExistingTopics(shouldPause);
+    }
     await event(`Последовательно завершаю темы. До ${config.concurrency} параллельных задач внутри текущей темы; проверка сохранена.`, 'info');
     const launch = (id: string, topicId: string, operation: () => Promise<void>, job?: GenerationJob, question?: StoredQuestion) => {
       const result = operation().then((): TaskResult => ({ id, job, question }), (error: unknown): TaskResult => {
@@ -179,7 +184,8 @@ export async function runParallelPipeline(handlers: PipelineHandlers, pauseReque
     while (!shouldPause() || active.size) {
       let topic = state.topics.find(item => item.id === state.activeTopicId && availableTopic(item));
       if (!topic && !active.size && !shouldPause()) {
-        topic = state.topics.find(availableTopic);
+        topic = state.jobs!.map(job => state.topics.find(item => item.id === job.topicId))
+          .find((item): item is Topic => Boolean(item && availableTopic(item))) ?? state.topics.find(availableTopic);
         state.activeTopicId = topic?.id ?? null;
         if (topic) {
           topic.progress ??= { status: 'working' };

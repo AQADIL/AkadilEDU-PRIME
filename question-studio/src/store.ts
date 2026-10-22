@@ -6,6 +6,7 @@ import type { StudioState } from './schema.js';
 import { generationJobSchema } from './schema.js';
 import { budgetCheckpointSchema, budgetHistorySchema, budgetUsage } from './budget.js';
 import { StatePersistence } from './statePersistence.js';
+import { scheduler } from 'node:timers/promises';
 
 const stateFile = path.join(config.dataDir, 'state.json');
 const lockFile = path.join(config.dataDir, 'studio.lock');
@@ -157,6 +158,7 @@ export function save(): Promise<void> {
   }
   const revision = ++requestedRevision;
   const operation = writes.then(async () => {
+    await scheduler.yield();
     if (persistedRevision >= revision) return;
     const snapshotRevision = requestedRevision;
     persistence.save(state);
