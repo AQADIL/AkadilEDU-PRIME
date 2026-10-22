@@ -53,6 +53,10 @@ Daily quizzes, personal review and topic practice connect to one question bank. 
 
 ## AkadilEDU ecosystem
 
+<table align="center">
+<tr>
+<td width="1000" align="center">
+
 <p align="center">
   <strong>AkadilEDU</strong> is the parent learning brand. <strong>AkadilEDU PRIME</strong> is its Telegram practice sub-brand.<br>
   Select a logo or product name to move between the two guides.
@@ -83,6 +87,9 @@ Daily quizzes, personal review and topic practice connect to one question bank. 
   <strong>Current guide</strong>
 </p>
 
+</td>
+</tr>
+</table>
 
 The brand relationship connects the product family. The two applications currently keep separate learner records; verified account linking and shared progress remain planned integrations.
 
@@ -133,20 +140,23 @@ AI review reduces errors; it does not certify mathematical correctness. These ar
 
 ## Technologies
 
-PRIME combines a Node.js Telegram bot, a React administration app and a TypeScript content workspace.
+<details>
+<summary><strong>View the technology stack and implementation roles</strong></summary>
 
-| Layer | Technologies | Role |
+| Layer | Technology | Purpose |
 | --- | --- | --- |
-| Telegram bot | **Node.js 22 · JavaScript · grammY** | Commands, inline answers, personal review and topic practice |
-| Admin interface | **React 19 · React Router · Vite** | Browser and Telegram Mini App administration |
-| Styling and interaction | **Tailwind CSS · Framer Motion · Lucide** | Responsive layouts, animations and icons |
-| Server and scheduling | **Cloud Functions · Cloud Scheduler** | Webhook handling, identity verification and timed quiz publication |
-| Data and hosting | **Firebase** | Realtime Database, Authentication, Cloud Storage and Hosting |
-| Content pipeline | **TypeScript · Zod · OpenAI API** | Structured question authoring, validation and independent review |
-| Mathematical media | **KaTeX · Playwright · Sharp** | Formula typesetting, browser rendering and image processing |
-| Cloud content worker | **Google Apps Script · esbuild · clasp** | Resumable content jobs and worker deployment |
+| Telegram bot | Node.js 22, JavaScript, grammY | Commands, inline answers, personal review and topic practice |
+| Admin interface | React 19, React Router, Vite | Browser and Telegram Mini App administration |
+| Styling and interaction | Tailwind CSS, Framer Motion, Lucide | Responsive layouts, animations and icons |
+| Server and scheduling | Cloud Functions, Cloud Scheduler | Webhook handling, identity verification and timed quiz publication |
+| Data and hosting | Firebase | Realtime Database, Authentication, Cloud Storage and Hosting |
+| Content pipeline | TypeScript, Zod, OpenAI API | Structured question authoring, validation and independent review |
+| Mathematical media | KaTeX, Playwright, Sharp | Formula typesetting, browser rendering and image processing |
+| Cloud content worker | Google Apps Script, esbuild, clasp | Resumable content jobs and worker deployment |
 
-Dependency manifests: [bot](bot/package.json) · [functions](functions/package.json) · [admin app](admin-mini-app/package.json) · [Question Studio](question-studio/package.json). Each component has its own lockfile.
+Exact dependency declarations: [bot](bot/package.json) · [functions](functions/package.json) · [admin app](admin-mini-app/package.json) · [Question Studio](question-studio/package.json). Each component has a lockfile recording resolved versions.
+
+</details>
 
 ## Architecture
 
