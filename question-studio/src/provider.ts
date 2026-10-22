@@ -50,7 +50,7 @@ export class RecoverableApiError extends Error {
 }
 
 class HttpError extends Error {
-  constructor(readonly status: number, message: string, readonly retryAfterMs?: number) {
+  constructor(readonly status: number, message: string, readonly retryAfterMs?: number, readonly code?: string) {
     super(`OpenAI HTTP ${status}: ${message}`);
   }
 }
@@ -94,6 +94,7 @@ const callLabel = (kind: ApiCall['kind']) => ({
 })[kind];
 
 const activeCreations = new Set<string>();
+let admissionAfter = 0;
 let admissions = Promise.resolve();
 function admitRequest<T>(operation: () => Promise<T>): Promise<T> {
   const result = admissions.then(operation);
@@ -142,12 +143,12 @@ async function request(endpoint: string, body?: object, clientRequestId?: string
   });
   if (!response.ok) {
     const data: unknown = await response.json().catch(() => null);
-    const parsed = z.object({ error: z.object({ message: z.string() }) }).safeParse(data);
+    const parsed = z.object({ error: z.object({ message: z.string(), code: z.string().nullish() }) }).safeParse(data);
     const retryAfter = response.headers.get('retry-after');
     const retryAfterMs = retryAfter === null ? undefined : /^\d+(?:\.\d+)?$/.test(retryAfter)
       ? Number(retryAfter) * 1000 : Math.max(0, Date.parse(retryAfter) - Date.now());
     throw new HttpError(response.status, parsed.success ? parsed.data.error.message : 'Request failed',
-      Number.isFinite(retryAfterMs) ? retryAfterMs : undefined);
+      Number.isFinite(retryAfterMs) ? retryAfterMs : undefined, parsed.success ? parsed.data.error.code ?? undefined : undefined);
   }
   return responseSchema.parse(await response.json());
 }
@@ -226,7 +227,7 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
       await terminalFailure(call, 'invalid_structured_result', true);
     }
     if (call?.status === 'uncertain' && call.quarantined) throw new UnidentifiedApiOutcomeError(call.id);
-    if (call?.status === 'uncertain' || (call && !call.responseId)) {
+    if (call?.status === 'uncertain' || (call && !call.responseId && !(call.status === 'settled' && call.terminalReason))) {
       throw new Error('Неопределённый результат API-запроса. Резерв сохранён; повторная оплата автоматически запрещена.');
     }
     const previous = call?.terminalReason ? call : undefined;
@@ -268,6 +269,10 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
         status: 'reserved', reserved, cost: 0,
       };
       call = await admitRequest(async () => {
+        while (admissionAfter > Date.now()) {
+          if (shouldPause?.()) throw new RequestPausedError('Пауза запрошена во время ожидания лимита API.');
+          await delay(Math.min(1000, admissionAfter - Date.now()));
+        }
         if (shouldPause?.()) throw new RequestPausedError('Пауза запрошена до следующего API-запроса.');
         for (const recorded of state.calls) {
           assertSettledCallWithinReservation(recorded);
@@ -325,6 +330,18 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
           await event(`${callLabel(kind)}: автоматическая попытка ${call.attempt}/${config.apiMaxAttempts}, причина: ${previous.terminalReason}. Лимит ответа: ${maxOutputTokens}.`);
         }
       } catch (error) {
+        if (!call.responseId && error instanceof HttpError && error.status === 429) {
+          admissionAfter = Math.max(admissionAfter, Date.now() + Math.max(config.recoveryBackoffMs, error.retryAfterMs ?? 0));
+          call.status = 'settled';
+          call.cost = 0;
+          call.webSearchCalls = 0;
+          call.webToolCalls = 0;
+          call.toolSources = [];
+          await terminalFailure(call, error.code ?? 'rate_limit_exceeded', error.code !== 'insufficient_quota');
+          if (error.code === 'insufficient_quota') throw new BudgetError('API сообщил об исчерпании доступного баланса. Новые запросы остановлены.');
+          await event('Достигнута скорость API. Новые запросы подождут автоматически; отклонённый запрос не оплачивается.', 'warning');
+          continue;
+        }
         call.status = call.responseId ? 'pending' : 'uncertain';
         if (!call.responseId) call.quarantined = true;
         await save();
