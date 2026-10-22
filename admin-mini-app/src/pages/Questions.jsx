@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Search, Filter, Trash2, Save, Upload, Check, X, Copy, SquarePen, ChevronDown, ChevronRight, ChevronLeft, Folder, FolderOpen, FileText, ArrowLeft, Image as ImageIcon, Loader2, CheckSquare, Square, ListChecks } from 'lucide-react';
 import { useTheme } from '../contexts/theme';
-import { getQuestions, createQuestion, updateQuestion, deleteQuestion, getTopics, validateQuestion, questionLanguages, questionContent } from '../services/questions';
+import { getQuestions, subscribeQuestions, subscribeTopics, createQuestion, updateQuestion, deleteQuestion, validateQuestion, questionLanguages, questionContent } from '../services/questions';
 import { compressImage, uploadImageToStorage, deleteImageFromStorage, processTextWithLatex, detectLatexInText } from '../services/imageUtils';
 import { storage, storageRef } from '../lib/firebase';
 import LatexPreviewCard from '../components/LatexPreviewCard';
@@ -107,21 +107,30 @@ export default function Questions() {
 
   useEffect(() => {
     let active = true;
-    async function loadData() {
-      try {
-        const [questionsData, topicsData] = await Promise.all([getQuestions(), getTopics()]);
-        if (active) {
-          setQuestions(questionsData);
-          setTopics(topicsData);
-        }
-      } catch {
-        if (active) setLoadError('Could not load questions or topics. Check your access and connection.');
-      } finally {
-        if (active) setLoading(false);
-      }
-    }
-    loadData();
-    return () => { active = false; };
+    const ready = new Set();
+    const failed = new Set();
+    const updateStatus = () => {
+      setLoadError(failed.size ? 'Could not load questions or topics. Check your access and connection.' : null);
+      setLoading(ready.size < 2 && failed.size === 0);
+    };
+    const subscriptions = [
+      ['questions', subscribeQuestions, setQuestions],
+      ['topics', subscribeTopics, setTopics],
+    ].map(([name, subscribe, setData]) => subscribe(data => {
+      if (!active) return;
+      setData(data);
+      ready.add(name);
+      failed.delete(name);
+      updateStatus();
+    }, () => {
+      if (!active) return;
+      failed.add(name);
+      updateStatus();
+    }));
+    return () => {
+      active = false;
+      subscriptions.forEach(unsubscribe => unsubscribe());
+    };
   }, []);
 
   const filteredQuestions = questions.filter(q =>

@@ -1,4 +1,4 @@
-import { db, ref, get, set, update, remove, push } from '../lib/firebase';
+import { db, ref, get, set, update, remove, push, onValue } from '../lib/firebase';
 
 const forbiddenDatabaseKeyCharacters = new Set(['.', '#', '$', '[', ']', '/']);
 const allowedStatuses = new Set(['draft', 'published']);
@@ -141,12 +141,24 @@ async function validateTopic(topicId) {
   }
 }
 
+function collectionRecords(snapshot) {
+  return Object.entries(snapshot.val() ?? {}).map(([id, record]) => ({ ...record, id }));
+}
+
+export function subscribeQuestions(onQuestions, onError) {
+  return onValue(ref(db, 'questions'), snapshot => onQuestions(collectionRecords(snapshot)), onError);
+}
+
+export function subscribeTopics(onTopics, onError) {
+  return onValue(ref(db, 'topics'), snapshot => onTopics(collectionRecords(snapshot)), onError);
+}
+
 export async function getQuestions() {
   const snapshot = await get(ref(db, 'questions'));
   if (!snapshot.exists()) {
     return [];
   }
-  return Object.entries(snapshot.val()).map(([id, question]) => ({ id, ...question }));
+  return collectionRecords(snapshot);
 }
 
 export async function getTopics() {
@@ -154,7 +166,7 @@ export async function getTopics() {
   if (!snapshot.exists()) {
     return [];
   }
-  return Object.entries(snapshot.val()).map(([id, topic]) => ({ id, ...topic }));
+  return collectionRecords(snapshot);
 }
 
 export async function createQuestion(questionData) {

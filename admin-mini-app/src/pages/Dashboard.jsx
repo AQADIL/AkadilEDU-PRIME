@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart3, Users, BrainCircuit, BookOpen, Calendar, LogOut } from 'lucide-react';
 import { useTheme } from '../contexts/theme';
-import { db, ref, get } from '../lib/firebase';
+import { db, ref, onValue } from '../lib/firebase';
 import { countQuestionTopics } from '../services/topics';
 
 function Dashboard({ onSignOut }) {
@@ -22,29 +22,34 @@ function Dashboard({ onSignOut }) {
   };
 
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setLoading(true);
-        const snapshots = await Promise.all(
-          ['questions', 'topics', 'users', 'campaigns'].map(path => get(ref(db, path)))
-        );
-        const [questionsSnapshot, topicsSnapshot, usersSnapshot, campaignsSnapshot] = snapshots;
-        const totalQuestions = questionsSnapshot.exists() ? questionsSnapshot.size : 0;
-        const totalTopics = countQuestionTopics(
-          topicsSnapshot.exists() ? Object.values(topicsSnapshot.val()) : []
-        );
-        const totalUsers = usersSnapshot.exists() ? usersSnapshot.size : 0;
-        const totalCampaigns = campaignsSnapshot.exists() ? campaignsSnapshot.size : 0;
-        setStats({ totalQuestions, totalTopics, totalUsers, totalCampaigns });
-        setError('');
-      } catch (loadError) {
-        setError(loadError.message || 'Unable to load dashboard statistics.');
-      } finally {
-        setLoading(false);
-      }
+    let active = true;
+    const ready = new Set();
+    const failed = new Set();
+    const sources = [
+      ['questions', 'totalQuestions'], ['topics', 'totalTopics'],
+      ['users', 'totalUsers'], ['campaigns', 'totalCampaigns'],
+    ];
+    const updateStatus = () => {
+      setError(failed.size ? 'Unable to load dashboard statistics. Check your access and connection.' : '');
+      setLoading(ready.size < sources.length && failed.size === 0);
     };
-
-    fetchStats();
+    const subscriptions = sources.map(([path, key]) => onValue(ref(db, path), snapshot => {
+      if (!active) return;
+      const count = path === 'topics'
+        ? countQuestionTopics(Object.values(snapshot.val() ?? {})) : snapshot.size;
+      setStats(current => ({ ...current, [key]: count }));
+      ready.add(path);
+      failed.delete(path);
+      updateStatus();
+    }, () => {
+      if (!active) return;
+      failed.add(path);
+      updateStatus();
+    }));
+    return () => {
+      active = false;
+      subscriptions.forEach(unsubscribe => unsubscribe());
+    };
   }, []);
 
   const statsData = [

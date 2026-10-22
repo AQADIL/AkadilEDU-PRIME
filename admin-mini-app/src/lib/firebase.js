@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getDatabase, ref, get, set, update, remove, push } from 'firebase/database';
+import { getDatabase, ref, get, set, update, remove, push, onValue } from 'firebase/database';
 import { getFunctions } from 'firebase/functions';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
@@ -21,4 +21,4 @@ const db = getDatabase(app);
 const functions = getFunctions(app, import.meta.env.VITE_FIREBASE_FUNCTIONS_REGION);
 const storage = getStorage(app);
 
-export { auth, db, functions, storage, ref, get, set, update, remove, push, storageRef, uploadBytes, getDownloadURL, deleteObject };
+export { auth, db, functions, storage, ref, get, set, update, remove, push, onValue, storageRef, uploadBytes, getDownloadURL, deleteObject };
