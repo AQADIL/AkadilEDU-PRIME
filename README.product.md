@@ -1,3 +1,5 @@
+<a id="readme-top"></a>
+
 <p align="center">
   <a href="https://github.com/AQADIL/AkadilEDU-PRIME">
     <img src="assets/brand/prime-transparent.png" alt="AkadilEDU PRIME logo" width="180">
@@ -10,13 +12,51 @@
   <strong>Learn here. Prove yourself anywhere.</strong>
 </p>
 
+<p align="center">
+  <a href="https://akadiledu-bot.web.app/"><img src="assets/readme/open-workspace.png" alt="Open the PRIME administrator workspace" width="260" height="52"></a>
+  <a href="https://akadiledu.web.app"><img src="assets/readme/open-platform.png" alt="Open the AkadilEDU learning platform" width="260" height="52"></a>
+</p>
+
 **A Telegram learning loop for UNT mathematics: answer in the channel, understand your mistakes, practise what you need.**
 
 Daily quizzes, personal review and topic practice connect to one question bank. Administrators manage the content and schedule through a browser or Telegram Mini App. A separate Question Studio creates, checks and repairs multilingual practice material through the API.
 
-[Admin workspace](https://akadiledu-bot.web.app/) · [Setup](QUICKSTART.md) · [Question Studio](question-studio/README.md) · [Security](SECURITY.md) · [License](LICENSE)
+<p align="center"><a href="#the-learning-experience">Student experience</a> · <a href="QUICKSTART.md">Getting started</a> · <a href="#akadiledu-ecosystem">Ecosystem</a> · <a href="SECURITY.md">Security</a> · <a href="LICENSE">Licence</a></p>
 
 > **Intellectual property - all rights reserved.** Copyright © 2026 Akadil Alish. The original source code, documentation and brand assets are proprietary. Use, copying, modification, redistribution and deployment require prior written permission, subject to the exceptions and preserved rights in [LICENSE](LICENSE). Public repository visibility does not grant a reuse licence.
+
+## Explore this guide
+
+<details>
+<summary><strong>Open the section navigator</strong></summary>
+
+- [Start here](#start-here)
+- [AkadilEDU ecosystem](#akadiledu-ecosystem)
+- [The learning experience](#the-learning-experience)
+- [Three connected workspaces](#three-connected-workspaces)
+- [Content that students can read](#content-that-students-can-read)
+- [Architecture](#architecture)
+- [Repository map](#repository-map)
+- [Authorized development](#authorized-development)
+- [Spending and recovery](#spending-and-recovery)
+- [Operational checks](#operational-checks)
+- [Questions before you start](#questions-before-you-start)
+- [Ownership](#ownership)
+
+</details>
+
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
+
+## Start here
+
+| Your goal | Go directly to | What to expect |
+| --- | --- | --- |
+| Understand the learner experience | [Quizzes and personal review](#the-learning-experience) | Channel answers, explanations and follow-up practice |
+| Manage questions or a campaign | [Open the admin workspace](https://akadiledu-bot.web.app/) | Administrator access through verified Telegram identity |
+| Set up an authorised environment | [Setup guide](QUICKSTART.md) | Configuration, secrets, deployment and channel connection |
+| Inspect the implementation | [Architecture](#architecture) | Expand the technical section for data flow and identity |
+
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## AkadilEDU ecosystem
 
@@ -55,9 +95,7 @@ Daily quizzes, personal review and topic practice connect to one question bank. 
 
 The brand relationship connects the product family. The two applications currently keep separate learner records; verified account linking and shared progress remain planned integrations.
 
-## Explore this guide
-
-[Learning experience](#the-learning-experience) · [Workspaces](#three-connected-workspaces) · [Content quality](#content-that-students-can-read) · [Architecture](#architecture) · [Repository map](#repository-map) · [Development](#authorized-development) · [Recovery](#spending-and-recovery) · [Ecosystem](#akadiledu-ecosystem)
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## The learning experience
 
@@ -82,6 +120,8 @@ flowchart LR
     E --> F[Similar topic practice]
 ```
 
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
+
 ## Three connected workspaces
 
 | Workspace | Purpose | Implementation |
@@ -91,6 +131,8 @@ flowchart LR
 | **Question Studio** | API authoring, independent review, correction, previews and costs | TypeScript, Zod, OpenAI API, KaTeX, Playwright, Sharp |
 
 The bot and question content support **Kazakh (`kk`), Russian (`ru`) and English (`en`)**. Bot interface translations live in [`bot/i18n.js`](bot/i18n.js). The admin interface is in English.
+
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## Content that students can read
 
@@ -103,6 +145,8 @@ Every generated question contains three equivalent statements, four answer choic
 - **Real topic coverage.** Studio reads the live topic tree, selects exact `isLast === true` leaves and excludes the `RANDOM` service node. Targets vary by topic; difficulty planning aims approximately at 25% easy, 45% medium and 30% hard.
 
 AI review reduces errors; it does not certify mathematical correctness. These are original practice materials, not official National Testing Center exam questions.
+
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## Architecture
 
@@ -144,6 +188,8 @@ See [SECURITY.md](SECURITY.md) for private reporting and responsible investigati
 
 </details>
 
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
+
 ## Repository map
 
 <details>
@@ -162,6 +208,8 @@ See [SECURITY.md](SECURITY.md) for private reporting and responsible investigati
 | [`firebase.json`](firebase.json) | Functions preparation and Hosting configuration |
 
 </details>
+
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## Authorized development
 
@@ -207,6 +255,8 @@ There is no root npm workspace or combined root check command. Dependency versio
 
 </details>
 
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
+
 ## Spending and recovery
 
 <details>
@@ -219,6 +269,8 @@ Local generation supports up to 16 concurrent jobs with serialized budget admiss
 The API limit belongs to this Studio run. It is not an account-wide cap and does not cover Firebase charges. Apps Script runtime quotas and provider rate limits remain separate. See [Studio operations](question-studio/README.md#costs-and-recovery) for the complete behavior.
 
 </details>
+
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## Operational checks
 
@@ -237,6 +289,33 @@ These are operator verification steps, not a claim that every deployment or ever
 
 </details>
 
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
+
+## Questions before you start
+
+<details>
+<summary><strong>Can I reuse or deploy the source code?</strong></summary>
+
+Prior written permission from Akadil Alish is required under [LICENSE](LICENSE). Public visibility does not grant a reuse or deployment licence. Third-party terms and the preserved rights in the licence continue to apply.
+
+</details>
+
+<details>
+<summary><strong>Do Web and Telegram already share learner progress?</strong></summary>
+
+The applications currently keep separate learner records. Verified account linking, shared topic progress and student learning plans remain planned product integrations.
+
+</details>
+
+<details>
+<summary><strong>Does opening the repository provide a working account?</strong></summary>
+
+Repository access does not grant access to production records, student enrolments or administrator accounts. Use the hosted application with an authorised account, or configure an environment you are permitted to operate using the setup instructions.
+
+</details>
+
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
+
 ## Ownership
 
 **The original AkadilEDU PRIME source, documentation and brand assets are the intellectual property of Akadil Alish.**
@@ -244,3 +323,5 @@ These are operator verification steps, not a claim that every deployment or ever
 Created and maintained by **[Akadil Alish · AQADIL](https://github.com/AQADIL)**.
 
 AkadilEDU PRIME's original source, documentation and brand assets are proprietary. Personal, educational and commercial reuse all require prior written permission. Third-party dependencies retain their own licenses; platform rights and existing valid grants are preserved under [LICENSE](LICENSE).
+
+<p align="right"><a href="#readme-top">Back to top ↑</a></p>
