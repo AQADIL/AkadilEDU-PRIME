@@ -26,3 +26,4 @@ question-studio/.data/
 question-studio/.cloud-build/
 **/.clasp.json
 **/.clasprc.json
+gha-creds-*.json

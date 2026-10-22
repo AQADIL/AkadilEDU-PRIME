@@ -16,9 +16,9 @@
   "dependencies": {
     "dotenv": "^16.4.0",
     "firebase-admin": "^14.5.0",
-    "katex": "^0.16.22",
+    "katex": "^0.18.4",
     "playwright": "^1.58.0",
-    "sharp": "^0.34.0",
+    "sharp": "^0.35.5",
     "tsx": "^4.20.0",
     "upng-js": "^2.1.0",
     "zod": "^4.0.0"

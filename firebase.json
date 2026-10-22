@@ -1,4 +1,12 @@
 {
+  "emulators": {
+    "database": {},
+    "storage": {},
+    "ui": {
+      "enabled": false
+    },
+    "singleProjectMode": true
+  },
   "database": {
     "rules": "database.rules.json"
   },

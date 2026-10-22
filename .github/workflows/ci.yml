@@ -1,0 +1,167 @@
+name: CI / CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  source:
+    name: Source security
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+      - name: Check source, credentials and private destinations
+        run: |
+          test -n "$PRIVATE_ADMIN_HOST_DIGESTS"
+          node scripts/check-project.mjs
+        env:
+          PRIVATE_ADMIN_HOST_DIGESTS: ${{ vars.PRIVATE_ADMIN_HOST_DIGESTS }}
+
+  admin:
+    name: Admin checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: admin-mini-app/package-lock.json
+      - run: npm --prefix admin-mini-app ci
+      - run: npm --prefix admin-mini-app run lint
+      - run: npm --prefix admin-mini-app run build
+        env:
+          VITE_TELEGRAM_WEB_APP_SCRIPT_URL: ${{ vars.TELEGRAM_WEB_APP_SCRIPT_URL }}
+      - run: npm --prefix admin-mini-app audit --omit=dev --audit-level=high
+
+  backend:
+    name: Backend checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            bot/package-lock.json
+            functions/package-lock.json
+      - run: npm --prefix bot ci
+      - run: npm --prefix functions ci
+      - run: npm --prefix functions run prepare:bot
+      - run: npm --prefix bot audit --omit=dev --audit-level=high
+      - run: npm --prefix functions audit --omit=dev --audit-level=high
+
+  studio:
+    name: Studio checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: question-studio/package-lock.json
+      - run: npm --prefix question-studio ci
+      - run: npm --prefix question-studio run check
+      - run: npm --prefix question-studio run cloud:check
+      - run: npm --prefix question-studio audit --omit=dev --audit-level=high
+
+  rules:
+    name: Access rules
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad
+        with:
+          distribution: temurin
+          java-version: '21'
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run check:rules
+
+  deploy:
+    name: Production deployment
+    needs: [source, admin, backend, studio, rules]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    environment: production
+    concurrency:
+      group: firebase-production
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            bot/package-lock.json
+            functions/package-lock.json
+            admin-mini-app/package-lock.json
+      - run: npm ci
+      - run: npm --prefix bot ci
+      - run: npm --prefix functions ci
+      - run: npm --prefix admin-mini-app ci
+      - name: Validate private deployment configuration
+        run: node scripts/firebase-release.mjs prepare
+        env:
+          FIREBASE_WEB_CONFIG: ${{ secrets.FIREBASE_WEB_CONFIG }}
+          FIREBASE_FUNCTIONS_CONFIG: ${{ secrets.FIREBASE_FUNCTIONS_CONFIG }}
+          FIREBASE_HOSTING_ORIGIN: ${{ secrets.FIREBASE_HOSTING_ORIGIN }}
+      - run: npm --prefix admin-mini-app run build
+      - name: Authenticate with short-lived Google credentials
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          project_id: ${{ vars.FIREBASE_PROJECT_ID }}
+          workload_identity_provider: ${{ vars.FIREBASE_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.FIREBASE_DEPLOY_SERVICE_ACCOUNT }}
+      - name: Deploy Firebase services
+        run: npx --no-install firebase deploy --project "$FIREBASE_PROJECT_ID" --only functions,database,storage,hosting --non-interactive
+      - name: Verify the published build
+        run: node scripts/firebase-release.mjs verify
+        env:
+          FIREBASE_HOSTING_ORIGIN: ${{ secrets.FIREBASE_HOSTING_ORIGIN }}

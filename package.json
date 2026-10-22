@@ -1,0 +1,29 @@
+{
+  "name": "akadiledu-prime-tooling",
+  "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.12.0 <23"
+  },
+  "scripts": {
+    "check:source": "node scripts/check-project.mjs",
+    "check:admin": "npm --prefix admin-mini-app run lint && npm --prefix admin-mini-app run build",
+    "check:studio": "npm --prefix question-studio run check && npm --prefix question-studio run cloud:check",
+    "check:rules": "firebase emulators:exec --only database,storage --project demo-prime-ci \"node --test tests/firebase-rules.test.mjs\"",
+    "check": "npm run check:source && npm run check:admin && npm run check:studio && npm run check:rules"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "5.0.2",
+    "firebase": "12.18.0",
+    "firebase-tools": "15.34.1"
+  },
+  "overrides": {
+    "@grpc/grpc-js": "1.14.5",
+    "chokidar": "4.0.3",
+    "gaxios": {
+      "uuid": "^11.1.1"
+    }
+  }
+}
