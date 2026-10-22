@@ -21,7 +21,7 @@ let failures = 0;
 let questionLanguage = 'kk';
 let questionIndex = 0;
 let currentQuestionId = null;
-let questionFilter = 'all';
+let questionFilter = 'published';
 
 function element(tag, className = '', content = '') {
   const node = document.createElement(tag);
@@ -236,13 +236,25 @@ const languageButtons = questionLanguages.map(language => {
   return { ...language, button: item };
 });
 const filter = select([['all', t('all')], ['validated', t('validated')], ['published', t('published')], ['failed', t('failed')]], t('filterQuestions'));
+filter.value = questionFilter;
 filter.addEventListener('change', () => {
   questionFilter = filter.value;
   currentQuestionId = null;
-  questionIndex = 0;
+  questionIndex = Math.max(0, visibleQuestions().length - 1);
   renderQuestion();
 });
-reviewToolbar.append(languages, filter);
+const latestControls = element('div', 'selection-row');
+const followQuestionsLabel = element('label', 'checkbox');
+const followQuestions = input('checkbox', { checked: true });
+followQuestions.className = '';
+followQuestions.addEventListener('change', () => renderQuestion());
+followQuestionsLabel.append(followQuestions, element('span', '', t('followQuestions')));
+const latestQuestion = button(t('latestQuestion'), () => {
+  followQuestions.checked = true;
+  renderQuestion();
+}, 'button');
+latestControls.append(latestQuestion, followQuestionsLabel);
+reviewToolbar.append(languages, filter, latestControls);
 const reviewBody = element('div', 'review-body');
 const reviewFooter = element('footer', 'review-footer');
 const pagination = element('div', 'pagination');
@@ -395,6 +407,7 @@ function renderEvents() {
 }
 
 function moveQuestion(change) {
+  followQuestions.checked = false;
   questionIndex += change;
   currentQuestionId = null;
   renderQuestion();
@@ -431,9 +444,11 @@ function renderQuestion() {
   for (const language of languageButtons) language.button.setAttribute('aria-pressed', String(language.code === questionLanguage));
   const questions = visibleQuestions();
   const savedIndex = questions.findIndex(question => question.id === currentQuestionId);
-  if (savedIndex >= 0) questionIndex = savedIndex;
+  if (followQuestions.checked) questionIndex = questions.length - 1;
+  else if (savedIndex >= 0) questionIndex = savedIndex;
   questionIndex = Math.max(0, Math.min(questionIndex, questions.length - 1));
   const question = questions[questionIndex];
+  if (question?.id !== currentQuestionId) reviewBody.scrollTop = 0;
   currentQuestionId = question?.id ?? null;
   questionCount.textContent = t('publishedCount', { count: number.format(state?.totals.published ?? 0) });
   questionCount.title = t('questionCountDetails', {
@@ -450,6 +465,7 @@ function renderQuestion() {
   position.textContent = questions.length ? t('position', { current: questionIndex + 1, total: questions.length }) : '—';
   previous.disabled = questionIndex === 0;
   next.disabled = questionIndex >= questions.length - 1;
+  latestQuestion.disabled = !questions.length;
   questionCheckbox.disabled = !question || !publishable(question) || pending;
   questionCheckbox.checked = Boolean(question && selectedQuestions.has(question.id));
   replaceWhenChanged('question', reviewBody, [question, questionLanguage, questionFilter], () => {

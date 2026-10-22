@@ -55,6 +55,7 @@ const messages = {
     sources: 'Источники', opensNewTab: 'откроется в новой вкладке',
     difficulty: 'Сложность', validation: 'Замечания проверки', question: 'Задание',
     previous: 'Предыдущее задание', next: 'Следующее задание', position: '{current} из {total}',
+    latestQuestion: 'Последнее', followQuestions: 'Автопоказ новых',
     working: 'Выполняется…', actionDone: 'Действие выполнено', requestFailed: 'Не удалось выполнить запрос',
     invalidResponse: 'Сервер вернул некорректный ответ. Проверьте журнал сервера.',
     unauthorized: 'Сессия студии недействительна. Перезагрузите страницу.',
