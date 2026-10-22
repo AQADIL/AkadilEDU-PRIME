@@ -38,6 +38,8 @@ function icon(name) {
     right: 'm10 6 6 6-6 6',
     menu: 'M4 6h16M4 12h16M4 18h16',
     close: 'm6 6 12 12M18 6 6 18',
+    expand: 'M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5',
+    collapse: 'M3 8h5V3M21 8h-5V3M8 21v-5H3M16 21v-5h5',
     brand: 'M4 20 12 4l8 16M7 14h10',
   };
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -223,7 +225,22 @@ const reviewHeader = element('header', 'review-header');
 reviewHeader.append(element('h2', '', t('review')));
 const questionCount = element('span', 'muted number');
 reviewHeader.append(questionCount);
+let reviewExpanded = false;
+const expandReview = button('', () => toggleReview(), 'button icon');
+reviewHeader.append(expandReview);
+function toggleReview(expanded = !reviewExpanded) {
+  reviewExpanded = expanded;
+  studio.classList.toggle('review-expanded', expanded);
+  expandReview.replaceChildren(icon(expanded ? 'collapse' : 'expand'));
+  expandReview.setAttribute('aria-label', t(expanded ? 'collapseReview' : 'expandReview'));
+  expandReview.setAttribute('aria-pressed', String(expanded));
+}
+toggleReview(false);
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape' && reviewExpanded) toggleReview(false);
+});
 const reviewToolbar = element('div', 'review-toolbar');
+const reviewTools = element('div', 'review-tools');
 const languages = element('div', 'language-tabs');
 languages.setAttribute('role', 'group');
 languages.setAttribute('aria-label', t('questionLanguage'));
@@ -243,7 +260,7 @@ filter.addEventListener('change', () => {
   questionIndex = Math.max(0, visibleQuestions().length - 1);
   renderQuestion();
 });
-const latestControls = element('div', 'selection-row');
+const latestControls = element('div', 'review-navigation');
 const followQuestionsLabel = element('label', 'checkbox');
 const followQuestions = input('checkbox', { checked: true });
 followQuestions.className = '';
@@ -252,11 +269,10 @@ followQuestionsLabel.append(followQuestions, element('span', '', t('followQuesti
 const latestQuestion = button(t('latestQuestion'), () => {
   followQuestions.checked = true;
   renderQuestion();
-}, 'button');
-latestControls.append(latestQuestion, followQuestionsLabel);
-reviewToolbar.append(languages, filter, latestControls);
+}, 'button small');
 const reviewBody = element('div', 'review-body');
 const reviewFooter = element('footer', 'review-footer');
+reviewFooter.hidden = true;
 const pagination = element('div', 'pagination');
 const position = element('span', 'number');
 const paginationButtons = element('div', 'pagination-buttons');
@@ -266,8 +282,11 @@ previous.append(icon('left'));
 const next = button('', () => moveQuestion(1), 'button icon');
 next.setAttribute('aria-label', t('next'));
 next.append(icon('right'));
-paginationButtons.append(previous, next);
+paginationButtons.append(previous, next, latestQuestion);
 pagination.append(position, paginationButtons);
+latestControls.append(pagination, followQuestionsLabel);
+reviewTools.append(languages, filter);
+reviewToolbar.append(reviewTools, latestControls);
 const selectionRow = element('div', 'selection-row');
 const questionSelection = element('label', 'checkbox');
 const questionCheckbox = input('checkbox');
@@ -284,9 +303,7 @@ const selectValid = button(t('selectValid'), () => {
 }, 'text-button');
 selectionRow.append(questionSelection, selectValid);
 const publish = button(t('publish'), () => action('/api/publish', { ids: [...selectedQuestions] }), 'button primary');
-const autoPublishNote = element('p', 'budget-note', t('autoPublish'));
-autoPublishNote.hidden = true;
-reviewFooter.append(pagination, selectionRow, publish, autoPublishNote);
+reviewFooter.append(selectionRow, publish);
 review.append(reviewHeader, reviewToolbar, reviewBody, reviewFooter);
 studio.append(sidebar, workspace, review);
 root.append(studio);
@@ -573,7 +590,7 @@ function renderControls() {
   for (const node of [run, pause, resume, publish, selectValid]) node.disabled = pending || !online;
   run.disabled ||= !selectedTopics.size;
   publish.disabled ||= !selectedQuestions.size;
-  autoPublishNote.hidden = state?.autoPublish !== true;
+  reviewFooter.hidden = state?.autoPublish !== false || questionFilter !== 'validated';
   publish.textContent = selectedQuestions.size ? t('publishCount', { count: selectedQuestions.size }) : t('publish');
   perTopic.disabled = batchSize.disabled = mode.disabled = active || pending;
   source.disabled = active || pending;
