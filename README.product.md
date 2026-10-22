@@ -18,9 +18,46 @@ Daily quizzes, personal review and topic practice connect to one question bank. 
 
 > **Intellectual property - all rights reserved.** Copyright © 2026 Akadil Alish. The original source code, documentation and brand assets are proprietary. Use, copying, modification, redistribution and deployment require prior written permission, subject to the exceptions and preserved rights in [LICENSE](LICENSE). Public repository visibility does not grant a reuse licence.
 
+## AkadilEDU ecosystem
+
+**AkadilEDU** is the parent learning brand. **AkadilEDU PRIME** is its Telegram practice sub-brand. Select a logo or product name to move between the two guides.
+
+<table>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/AQADIL/AkadilEDU/blob/main/README.product.md">
+        <img src="https://github.com/AQADIL/AkadilEDU/raw/main/public/icons/logo-прозрачный.png" alt="AkadilEDU parent brand" width="110"><br>
+        <strong>AkadilEDU</strong>
+      </a><br>
+      <sub>PARENT BRAND · WEB/PWA</sub><br>
+      Courses, video lessons and exam preparation.<br>
+      <a href="https://github.com/AQADIL/AkadilEDU/blob/main/README.product.md">Open the AkadilEDU guide →</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <strong>↓</strong><br>
+      <sub>Telegram practice sub-brand</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <a href="https://github.com/AQADIL/AkadilEDU-PRIME/blob/main/README.product.md">
+        <img src="https://github.com/AQADIL/AkadilEDU-PRIME/raw/main/assets/brand/prime-transparent.png" alt="AkadilEDU PRIME Telegram sub-brand" width="96"><br>
+        <strong>AkadilEDU PRIME</strong>
+      </a><br>
+      <sub>TELEGRAM PRACTICE</sub><br>
+      Channel quizzes, mistake review and focused topic practice.<br>
+      <strong>Current guide</strong>
+    </td>
+  </tr>
+</table>
+
+The brand relationship connects the product family. The two applications currently keep separate learner records; verified account linking and shared progress remain planned integrations.
+
 ## Explore this guide
 
-[Learning experience](#the-learning-experience) · [Workspaces](#three-connected-workspaces) · [Content quality](#content-that-students-can-read) · [Architecture](#architecture) · [Repository map](#repository-map) · [Development](#authorized-development) · [Recovery](#spending-and-recovery) · [Ecosystem](#place-in-the-akadiledu-ecosystem)
+[Learning experience](#the-learning-experience) · [Workspaces](#three-connected-workspaces) · [Content quality](#content-that-students-can-read) · [Architecture](#architecture) · [Repository map](#repository-map) · [Development](#authorized-development) · [Recovery](#spending-and-recovery) · [Ecosystem](#akadiledu-ecosystem)
 
 ## The learning experience
 
@@ -182,15 +219,6 @@ Local generation supports up to 16 concurrent jobs with serialized budget admiss
 The API limit belongs to this Studio run. It is not an account-wide cap and does not cover Firebase charges. Apps Script runtime quotas and provider rate limits remain separate. See [Studio operations](question-studio/README.md#costs-and-recovery) for the complete behavior.
 
 </details>
-
-## Place in the AkadilEDU ecosystem
-
-| Product | Main responsibility | Guide |
-| --- | --- | --- |
-| AkadilEDU Web/PWA | Video courses, structured lessons and practice tests | [Web product guide](https://github.com/AQADIL/AkadilEDU/blob/main/README.product.md) |
-| AkadilEDU PRIME | Telegram quizzes, personal review and short topic practice | This repository |
-
-Students currently use the two applications through their respective account and progress systems. Verified identity linking, shared topic progress and AI-generated individual learning plans are planned product integrations. Question Studio produces and reviews content; it does not currently generate a learner's individual study plan.
 
 ## Operational checks
 
