@@ -12,16 +12,11 @@
   <strong>Learn here. Prove yourself anywhere.</strong>
 </p>
 
-<p align="center">
-  <a href="https://akadiledu-bot.web.app/"><img src="assets/readme/open-workspace.png" alt="Open the PRIME administrator workspace" width="260" height="52"></a>
-  <a href="https://akadiledu.web.app"><img src="assets/readme/open-platform.png" alt="Open the AkadilEDU learning platform" width="260" height="52"></a>
-</p>
-
 **A Telegram learning loop for UNT mathematics: answer in the channel, understand your mistakes, practise what you need.**
 
 Daily quizzes, personal review and topic practice connect to one question bank. Administrators manage the content and schedule through a browser or Telegram Mini App. A separate Question Studio creates, checks and repairs multilingual practice material through the API.
 
-<p align="center"><a href="#the-learning-experience">Student experience</a> · <a href="#deployment-and-first-run-setup">Getting started</a> · <a href="#akadiledu-ecosystem">Ecosystem</a> · <a href="SECURITY.md">Security</a> · <a href="LICENSE">Licence</a></p>
+<p align="center"><a href="#the-learning-experience">Student experience</a> · <a href="#technologies">Technologies</a> · <a href="#deployment-and-first-run-setup">Getting started</a> · <a href="#akadiledu-ecosystem">Ecosystem</a> · <a href="SECURITY.md">Security</a> · <a href="LICENSE">Licence</a></p>
 
 > **Intellectual property - all rights reserved.** Copyright © 2026 Akadil Alish. The original source code, documentation and brand assets are proprietary. Use, copying, modification, redistribution and deployment require prior written permission, subject to the exceptions and preserved rights in [LICENSE](LICENSE). Public repository visibility does not grant a reuse licence.
 
@@ -35,6 +30,7 @@ Daily quizzes, personal review and topic practice connect to one question bank. 
 - [The learning experience](#the-learning-experience)
 - [Three connected workspaces](#three-connected-workspaces)
 - [Content that students can read](#content-that-students-can-read)
+- [Technologies](#technologies)
 - [Architecture](#architecture)
 - [Repository map](#repository-map)
 - [Authorized development](#authorized-development)
@@ -46,8 +42,6 @@ Daily quizzes, personal review and topic practice connect to one question bank. 
 
 </details>
 
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
-
 ## Start here
 
 | Your goal | Go directly to | What to expect |
@@ -57,46 +51,40 @@ Daily quizzes, personal review and topic practice connect to one question bank. 
 | Set up an authorised environment | [Setup guide](#deployment-and-first-run-setup) | Configuration, secrets, deployment and channel connection |
 | Inspect the implementation | [Architecture](#architecture) | Expand the technical section for data flow and identity |
 
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
-
 ## AkadilEDU ecosystem
 
-**AkadilEDU** is the parent learning brand. **AkadilEDU PRIME** is its Telegram practice sub-brand. Select a logo or product name to move between the two guides.
+<p align="center">
+  <strong>AkadilEDU</strong> is the parent learning brand. <strong>AkadilEDU PRIME</strong> is its Telegram practice sub-brand.<br>
+  Select a logo or product name to move between the two guides.
+</p>
 
-<table>
-  <tr>
-    <td align="center">
-      <a href="https://github.com/AQADIL/AkadilEDU/blob/main/README.product.md">
-        <img src="https://github.com/AQADIL/AkadilEDU/raw/main/public/icons/logo-прозрачный.png" alt="AkadilEDU parent brand" width="110"><br>
-        <strong>AkadilEDU</strong>
-      </a><br>
-      <sub>PARENT BRAND · WEB/PWA</sub><br>
-      Courses, video lessons and exam preparation.<br>
-      <a href="https://github.com/AQADIL/AkadilEDU/blob/main/README.product.md">Open the AkadilEDU guide →</a>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <strong>↓</strong><br>
-      <sub>Telegram practice sub-brand</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <a href="https://github.com/AQADIL/AkadilEDU-PRIME/blob/main/README.product.md">
-        <img src="https://github.com/AQADIL/AkadilEDU-PRIME/raw/main/assets/brand/prime-transparent.png" alt="AkadilEDU PRIME Telegram sub-brand" width="96"><br>
-        <strong>AkadilEDU PRIME</strong>
-      </a><br>
-      <sub>TELEGRAM PRACTICE</sub><br>
-      Channel quizzes, mistake review and focused topic practice.<br>
-      <strong>Current guide</strong>
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <a href="https://github.com/AQADIL/AkadilEDU/blob/main/README.product.md">
+    <img src="https://github.com/AQADIL/AkadilEDU/raw/main/public/icons/logo-прозрачный.png" alt="AkadilEDU parent brand" width="110"><br>
+    <strong>AkadilEDU</strong>
+  </a><br>
+  <sub>PARENT BRAND · WEB/PWA</sub><br>
+  Courses, video lessons and exam preparation.<br>
+  <a href="https://github.com/AQADIL/AkadilEDU/blob/main/README.product.md">Open the AkadilEDU guide →</a>
+</p>
+
+<p align="center">
+  <strong>↓</strong><br>
+  <sub>Telegram practice sub-brand</sub>
+</p>
+
+<p align="center">
+  <a href="https://github.com/AQADIL/AkadilEDU-PRIME/blob/main/README.product.md">
+    <img src="https://github.com/AQADIL/AkadilEDU-PRIME/raw/main/assets/brand/prime-transparent.png" alt="AkadilEDU PRIME Telegram sub-brand" width="96"><br>
+    <strong>AkadilEDU PRIME</strong>
+  </a><br>
+  <sub>TELEGRAM PRACTICE</sub><br>
+  Channel quizzes, mistake review and focused topic practice.<br>
+  <strong>Current guide</strong>
+</p>
+
 
 The brand relationship connects the product family. The two applications currently keep separate learner records; verified account linking and shared progress remain planned integrations.
-
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## The learning experience
 
@@ -121,8 +109,6 @@ flowchart LR
     E --> F[Similar topic practice]
 ```
 
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
-
 ## Three connected workspaces
 
 | Workspace | Purpose | Implementation |
@@ -132,8 +118,6 @@ flowchart LR
 | **Question Studio** | API authoring, independent review, correction, previews and costs | TypeScript, Zod, OpenAI API, KaTeX, Playwright, Sharp |
 
 The bot and question content support **Kazakh (`kk`), Russian (`ru`) and English (`en`)**. Bot interface translations live in [`bot/i18n.js`](bot/i18n.js). The admin interface is in English.
-
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## Content that students can read
 
@@ -147,7 +131,22 @@ Every generated question contains three equivalent statements, four answer choic
 
 AI review reduces errors; it does not certify mathematical correctness. These are original practice materials, not official National Testing Center exam questions.
 
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
+## Technologies
+
+PRIME combines a Node.js Telegram bot, a React administration app and a TypeScript content workspace.
+
+| Layer | Technologies | Role |
+| --- | --- | --- |
+| Telegram bot | **Node.js 22 · JavaScript · grammY** | Commands, inline answers, personal review and topic practice |
+| Admin interface | **React 19 · React Router · Vite** | Browser and Telegram Mini App administration |
+| Styling and interaction | **Tailwind CSS · Framer Motion · Lucide** | Responsive layouts, animations and icons |
+| Server and scheduling | **Cloud Functions · Cloud Scheduler** | Webhook handling, identity verification and timed quiz publication |
+| Data and hosting | **Firebase** | Realtime Database, Authentication, Cloud Storage and Hosting |
+| Content pipeline | **TypeScript · Zod · OpenAI API** | Structured question authoring, validation and independent review |
+| Mathematical media | **KaTeX · Playwright · Sharp** | Formula typesetting, browser rendering and image processing |
+| Cloud content worker | **Google Apps Script · esbuild · clasp** | Resumable content jobs and worker deployment |
+
+Dependency manifests: [bot](bot/package.json) · [functions](functions/package.json) · [admin app](admin-mini-app/package.json) · [Question Studio](question-studio/package.json). Each component has its own lockfile.
 
 ## Architecture
 
@@ -189,8 +188,6 @@ See [SECURITY.md](SECURITY.md) for private reporting and responsible investigati
 
 </details>
 
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
-
 ## Repository map
 
 <details>
@@ -209,8 +206,6 @@ See [SECURITY.md](SECURITY.md) for private reporting and responsible investigati
 | [`firebase.json`](firebase.json) | Functions preparation and Hosting configuration |
 
 </details>
-
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## Authorized development
 
@@ -327,8 +322,6 @@ For generation on Google Apps Script, follow the [cloud worker guide](question-s
 
 </details>
 
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
-
 ## Spending and recovery
 
 <details>
@@ -341,8 +334,6 @@ Local generation supports up to 16 concurrent jobs with serialized budget admiss
 The API limit belongs to this Studio run. It is not an account-wide cap and does not cover Firebase charges. Apps Script runtime quotas and provider rate limits remain separate. See [Studio operations](question-studio/README.md#costs-and-recovery) for the complete behavior.
 
 </details>
-
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## Operational checks
 
@@ -360,8 +351,6 @@ Before enabling a real campaign, verify the configured environment with a channe
 These are operator verification steps, not a claim that every deployment or every question has passed review. Source lint, type checks and builds do not replace a connected Telegram campaign check.
 
 </details>
-
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## Questions before you start
 
@@ -385,8 +374,6 @@ The applications currently keep separate learner records. Verified account linki
 Repository access does not grant access to production records, student enrolments or administrator accounts. Use the hosted application with an authorised account, or configure an environment you are permitted to operate using the setup instructions.
 
 </details>
-
-<p align="right"><a href="#readme-top">Back to top ↑</a></p>
 
 ## Ownership
 
