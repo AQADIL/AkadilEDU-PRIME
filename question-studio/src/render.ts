@@ -12,11 +12,16 @@ import { questionPresentationIssues } from './questionPresentation.js';
 let browser: Browser | undefined;
 export class QuestionRenderError extends Error {}
 export class DiagramLayoutError extends QuestionRenderError {}
+export class RenderRetryError extends Error {
+  constructor(readonly retryAfterMs: number) {
+    super('Создание изображения временно недоступно. Сохранённое задание будет отрисовано повторно без нового запроса к модели.');
+  }
+}
 const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-export async function closeRenderer() { await browser?.close(); browser = undefined; }
+export async function closeRenderer() { const previous = browser; browser = undefined; await previous?.close(); }
 
 export async function renderQuestion(question: StoredQuestion): Promise<Record<Language, string> | null> {
-  const issues = questionPresentationIssues(question.translations);
+  const issues = questionPresentationIssues(question.translations, question.diagram);
   if (issues.length) throw new QuestionRenderError(issues.join('; '));
   if (!question.diagram && !languages.some(lang => /\$|\\[A-Za-z]+/.test(question.translations[lang].text))) return null;
   browser ||= await chromium.launch({ channel: config.browserChannel, headless: true });
@@ -100,7 +105,14 @@ export async function renderQuestion(question: StoredQuestion): Promise<Record<L
       result[language] = filename;
       rendered.set(signature, filename);
       translation.localImageUrl = `/media/${path.basename(filename)}`;
-    } finally { await page.close(); }
+    } catch (error) {
+      if (!(error instanceof QuestionRenderError) && error instanceof Error
+        && /Timeout|Target closed|Target page, context or browser has been closed|browser has been disconnected|Protocol error/i.test(error.message)) {
+        await closeRenderer().catch(() => undefined);
+        throw new RenderRetryError(config.recoveryBackoffMs);
+      }
+      throw error;
+    } finally { await page.close().catch(() => undefined); }
   }
   return result;
 }

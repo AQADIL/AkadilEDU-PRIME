@@ -165,8 +165,9 @@ pipeline.hidden = true;
 const pipelineHeading = element('div', 'pipeline-heading');
 const pipelineSummary = element('span', 'pipeline-summary number');
 pipelineHeading.append(element('h2', '', t('parallelWork')), pipelineSummary);
+const currentTopicLabel = element('p', 'pipeline-summary');
 const pipelineJobs = element('ul', 'pipeline-jobs');
-pipeline.append(pipelineHeading, pipelineJobs);
+pipeline.append(pipelineHeading, currentTopicLabel, pipelineJobs);
 const errorNotice = element('div', 'notice');
 errorNotice.setAttribute('role', 'alert');
 errorNotice.hidden = true;
@@ -188,7 +189,7 @@ const composer = element('form', 'composer');
 const mode = select([['generate', t('generate')], ['parse', t('parse')]], t('mode'));
 const modeRow = element('div', 'mode-row');
 modeRow.append(field(t('mode'), mode));
-const perTopic = input('number', { min: '10', max: '200', required: true, step: '1' });
+const perTopic = input('number', { required: true, step: '1' });
 const batchSize = input('number', { min: '1', max: '5', required: true, step: '1' });
 const fields = element('div', 'field-row');
 fields.append(field(t('perTopic'), perTopic), field(t('batchSize'), batchSize));
@@ -313,12 +314,15 @@ function publishable(question) {
 }
 
 function visibleQuestions() {
-  return (state?.questions ?? []).filter(question => {
+  const questions = (state?.questions ?? []).filter(question => {
     if (questionFilter === 'validated') return publishable(question);
     if (questionFilter === 'published') return question.status === 'published';
     if (questionFilter === 'failed') return question.validation?.passed === false;
     return true;
   });
+  const timestamp = question => questionFilter === 'published'
+    ? question.publishedAt ?? question.generation?.createdAt ?? 0 : question.generation?.createdAt ?? 0;
+  return questions.sort((a, b) => timestamp(a) - timestamp(b));
 }
 
 function displayTopicName(topic) {
@@ -349,7 +353,11 @@ function renderTopics() {
       if (topic.path?.length) text.append(element('span', 'topic-path', topic.path.join(' / ')));
       const bottom = element('span', 'topic-bottom');
       bottom.append(element('span', '', topic.eligible ? t(topic.targetPlanned ? 'planned' : 'estimated') : topic.reason || t('topicDisabled')), element('span', 'number', t('topicProgress', { generated: topic.generated ?? 0, target: topic.target ?? 0 })));
-      if (topic.rationale) label.title = topic.rationale;
+      if (topic.progress) {
+        text.append(element('span', 'topic-bottom', t(`topic_${topic.progress.status}`)));
+        label.title = [topic.rationale, topic.progress.reason, ...(topic.progress.missingSkills ?? [])].filter(Boolean).join('\n');
+      }
+      if (!topic.progress && topic.rationale) label.title = topic.rationale;
       text.append(bottom);
       label.append(checkbox, text);
       return label;
@@ -365,6 +373,10 @@ function renderPipeline() {
     concurrency: number.format(progress.concurrency),
     requests: number.format(progress.activeRequests),
   });
+  currentTopicLabel.hidden = !progress.currentTopic;
+  currentTopicLabel.textContent = progress.currentTopic ? t('currentTopic', {
+    name: progress.currentTopic.name, completed: progress.completedTopics, total: progress.totalTopics,
+  }) : '';
   replaceWhenChanged('pipeline', pipelineJobs, progress.jobs, () => progress.jobs.map(job => {
     const row = element('li', 'pipeline-job');
     row.dataset.stage = job.stage;
@@ -725,6 +737,10 @@ async function refreshState() {
     const savedTopics = Array.isArray(state.selectedTopicIds) && state.selectedTopicIds.length ? new Set(state.selectedTopicIds) : null;
     for (const topic of state.topics) if (topic.eligible && (!savedTopics || savedTopics.has(topic.id))) selectedTopics.add(topic.id);
     perTopic.value = String(state.config.perTopic);
+    if (state.config.topicLimits) {
+      perTopic.min = String(state.config.topicLimits.minimum);
+      perTopic.max = String(state.config.topicLimits.maximum);
+    }
     batchSize.value = String(state.config.batchSize);
     if (['generate', 'parse'].includes(state.mode)) mode.value = state.mode;
     if (typeof state.sourceText === 'string') source.value = state.sourceText;

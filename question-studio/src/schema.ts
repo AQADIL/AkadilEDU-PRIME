@@ -52,7 +52,7 @@ export function restoreGeneratedQuestion(value: unknown): GeneratedQuestion {
   return persistedGeneratedQuestionSchema.parse(value);
 }
 export const generationSchema = z.strictObject({
-  recommendedTarget: z.number().int().min(8).max(40),
+  recommendedTarget: z.number().int().min(1).max(200),
   rationale: z.string().min(1).max(600),
   coverageGoals: z.array(z.string().min(1).max(200)).min(2).max(8),
   consumedSource: z.string().max(12000),
@@ -121,6 +121,7 @@ export interface StoredQuestion {
   translations: Record<Language, Translation>;
   diagram: Diagram | null;
   status: 'draft' | 'published' | 'rejected';
+  publishedAt?: number;
   validation: { passed: boolean; issues: string[] };
   fingerprint: string;
   repair?: {
@@ -168,6 +169,21 @@ export interface Topic {
   requestFailures?: number;
   rationale?: string;
   coverageGoals?: string[];
+  progress?: {
+    status: 'working' | 'checking' | 'needs_work' | 'completed' | 'blocked';
+    missingSkills?: string[];
+    reason?: string;
+    curriculumCodes?: string[];
+    curriculumRole?: 'listed' | 'prerequisite' | 'outside_scope';
+    coveredGoals?: { goalId: string; questionIds: string[] }[];
+    checkedQuestionIds?: string[];
+    completedAt?: number;
+    audit?: { callId?: string; fingerprint: string; input: {
+      topic: { id: string; path: string[]; goals: { id: string; description: string }[] };
+      questions: { id: string; difficulty: Difficulty; text: string; options: string[]; explanation: string }[];
+      limits: { minimum: number; maximum: number };
+    } };
+  };
   researchCallId?: string;
   researchUnavailable?: boolean;
   research?: TopicResearch;
@@ -286,7 +302,8 @@ export interface StudioState {
   error: string | null;
   model: string;
   budget: { limit: number; spent: number; reserved: number; checkpoint?: BudgetCheckpoint };
-  config: { perTopic: number; batchSize: number; reasoningEffort: string; difficultyWeights: Record<Difficulty, number> };
+  config: { perTopic: number; batchSize: number; reasoningEffort: string; difficultyWeights: Record<Difficulty, number>;
+    topicLimits?: { minimum: number; maximum: number } };
   topics: Topic[];
   events: { id: string; time: number; level: string; message: string; topicId?: string }[];
   questions: StoredQuestion[];
@@ -304,7 +321,7 @@ export interface StudioState {
 
 const latex = /\\[A-Za-z]+|\\[()[\]]|\$\$?|\^\{|_\{/;
 export function contentIssues(question: GeneratedQuestion): string[] {
-  const issues = questionPresentationIssues(question.translations);
+  const issues = questionPresentationIssues(question.translations, question.diagram);
   for (const language of languages) {
     const t = question.translations[language];
     const outsideMath = t.text.replace(/\$\$[\s\S]*?\$\$|\$[^$]*?\$/g, '');

@@ -15,7 +15,9 @@ const env = z.object({
   STUDIO_DATA_DIR: z.string().min(1),
   STUDIO_BROWSER_CHANNEL: z.string().min(1),
   STUDIO_BUDGET_USD: z.coerce.number().positive().max(50),
-  STUDIO_PER_TOPIC: z.coerce.number().int().min(10).max(200),
+  STUDIO_PER_TOPIC: z.coerce.number().int().min(1).max(200),
+  STUDIO_TOPIC_MIN_QUESTIONS: z.coerce.number().int().min(1).max(200),
+  STUDIO_TOPIC_MAX_QUESTIONS: z.coerce.number().int().min(1).max(200),
   STUDIO_BATCH_SIZE: z.coerce.number().int().min(1).max(5),
   STUDIO_CONCURRENCY: z.coerce.number().int().min(1).max(24),
   STUDIO_REPAIR_CONCURRENCY: z.coerce.number().int().min(1).max(16).optional(),
@@ -59,6 +61,10 @@ const env = z.object({
 }).parse(process.env);
 
 const origin = new URL(env.STUDIO_PUBLIC_ORIGIN);
+if (env.STUDIO_TOPIC_MIN_QUESTIONS > env.STUDIO_TOPIC_MAX_QUESTIONS
+  || env.STUDIO_PER_TOPIC < env.STUDIO_TOPIC_MIN_QUESTIONS || env.STUDIO_PER_TOPIC > env.STUDIO_TOPIC_MAX_QUESTIONS) {
+  throw new Error('Topic question limits must contain the initial per-topic estimate');
+}
 if (origin.hostname !== env.STUDIO_HOST || Number(origin.port) !== env.STUDIO_PORT || origin.protocol !== 'http:'
   || origin.pathname !== '/' || origin.username || origin.password || origin.search || origin.hash) {
   throw new Error('STUDIO_PUBLIC_ORIGIN must match the configured local host and port');
@@ -87,6 +93,8 @@ export const config = {
   browserChannel: env.STUDIO_BROWSER_CHANNEL,
   budget: env.STUDIO_BUDGET_USD,
   perTopic: env.STUDIO_PER_TOPIC,
+  minTopicQuestions: env.STUDIO_TOPIC_MIN_QUESTIONS,
+  maxTopicQuestions: env.STUDIO_TOPIC_MAX_QUESTIONS,
   batchSize: env.STUDIO_BATCH_SIZE,
   concurrency: env.STUDIO_CONCURRENCY,
   repairConcurrency: Math.min(env.STUDIO_REPAIR_CONCURRENCY ?? env.STUDIO_CONCURRENCY, env.STUDIO_CONCURRENCY),

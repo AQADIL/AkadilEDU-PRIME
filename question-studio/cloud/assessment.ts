@@ -10,7 +10,7 @@ import { statementPresentation } from '../src/statementPresentation.js';
 
 export type Verdict = z.infer<typeof reviewSchema>['reviews'][number];
 export class BatchContentError extends Error {}
-export const cloudNotation = `\nRender statement fractions and complex expressions as delimited LaTeX, with translated instructions outside the formula block and exactly the same formula in all three languages whenever possible. The cloud renderer supports frac/dfrac/tfrac, sqrt (including indexed roots), upper/lower indices, left/right delimiters, overline, binom, plain text/operator names, standard Greek letters and arithmetic/relation/trigonometric/logarithmic symbols, and cases/aligned/gathered/matrix/pmatrix/bmatrix/vmatrix environments. Use these supported constructs; preserve mathematical meaning. Put no LaTeX or image references in options, explanations, hints or diagram labels: these fields must remain readable Unicode. Diagram labels should be language-neutral where possible. Never include the translated instruction inside an image when it can be separated without losing meaning.`;
+export const cloudNotation = `\nRender statement fractions and complex expressions as delimited LaTeX, with translated instructions outside the formula block and the same formula across languages only when all notation is genuinely language-neutral; local operator names require translated text or separate local images. The cloud renderer supports frac/dfrac/tfrac, sqrt (including indexed roots), upper/lower indices, left/right delimiters, overline, binom, plain text/operator names, standard Greek letters and arithmetic/relation/trigonometric/logarithmic symbols, and cases/aligned/gathered/matrix/pmatrix/bmatrix/vmatrix environments. Use these supported constructs; preserve mathematical meaning. Put no LaTeX or image references in options, explanations, hints or diagram labels: these fields must remain readable Unicode. Diagram labels should be language-neutral where possible. Never include the translated instruction inside an image when it can be separated without losing meaning.`;
 export function cloudTextIssues(question: GeneratedQuestion): string[] {
   const issues: string[] = [];
   for (const language of languages) {
@@ -54,7 +54,10 @@ export function publishValidatedQuestion(question: StoredQuestion): boolean {
   try {
     const images = renderQuestion(question);
     if (images) for (const language of languages) question.translations[language].imageUrl = uploadImage(question.id, images[language]);
-    if (config.autoPublish) question.status = 'published';
+    if (config.autoPublish) {
+      question.status = 'published';
+      question.publishedAt = Date.now();
+    }
     saveQuestionToDatabase(question);
     return true;
   } catch (error) {

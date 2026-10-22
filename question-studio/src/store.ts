@@ -29,6 +29,7 @@ function initialState(): StudioState {
     version: 1, runId: randomUUID(), status: 'idle', phase: 'Готово к запуску', error: null,
     model: config.model, budget: { limit: config.budget, spent: 0, reserved: 0 },
     config: { perTopic: config.perTopic, batchSize: config.batchSize, reasoningEffort: config.reasoningEffort,
+      topicLimits: { minimum: config.minTopicQuestions, maximum: config.maxTopicQuestions },
       difficultyWeights: { easy: 0.25, medium: 0.45, hard: 0.30 } },
     topics: [], events: [], questions: [], calls: [], totals: { eligible: 0, generated: 0, published: 0, rejected: 0 },
     activeTopicId: null, mode: 'generate', sourceText: '', sourceOffset: 0, selectedTopicIds: [], pendingBatch: null,
@@ -94,6 +95,10 @@ export const state: StudioState = await readFile(stateFile, 'utf8').then(value =
   saved.model = config.model;
   saved.config.reasoningEffort = config.reasoningEffort;
   saved.config.batchSize = config.batchSize;
+  saved.config.perTopic = config.perTopic;
+  saved.config.topicLimits = { minimum: config.minTopicQuestions, maximum: config.maxTopicQuestions };
+  for (const topic of saved.topics) topic.target = topic.eligible
+    ? Math.max(topic.generated, Math.min(topic.progress?.curriculumRole ? config.maxTopicQuestions : config.perTopic, topic.target)) : 0;
   saved.budget.limit = config.budget;
   if (saved.budget.checkpoint) saved.budget.checkpoint = budgetCheckpointSchema.parse(saved.budget.checkpoint);
   const usage = budgetUsage(saved.calls, saved.budget);
@@ -110,15 +115,19 @@ export const state: StudioState = await readFile(stateFile, 'utf8').then(value =
 });
 
 let writes = Promise.resolve();
+let requestedRevision = 0;
+let persistedRevision = 0;
 export function save(): Promise<void> {
   const usage = budgetUsage(state.calls, state.budget);
   state.budget.spent = usage.spent;
   state.budget.reserved = usage.reserved;
   const countsByTopic = new Map<string, number>();
+  const validQuestionIds = new Set<string>();
   let generated = 0;
   let published = 0;
   for (const question of state.questions) {
     if (question.validation.passed) {
+      validQuestionIds.add(question.id);
       generated++;
       countsByTopic.set(question.topic, (countsByTopic.get(question.topic) ?? 0) + 1);
     }
@@ -132,10 +141,18 @@ export function save(): Promise<void> {
   };
   for (const topic of state.topics) {
     topic.generated = countsByTopic.get(topic.id) ?? 0;
+    if (topic.progress?.status === 'completed' && topic.progress.checkedQuestionIds?.some(id =>
+      !validQuestionIds.has(id))) {
+      topic.progress.status = 'needs_work';
+      delete topic.progress.completedAt;
+    }
     if (!topic.targetPlanned) topic.target = topic.eligible ? state.config.perTopic : 0;
   }
-  const data = JSON.stringify(state);
+  const revision = ++requestedRevision;
   const operation = writes.then(async () => {
+    if (persistedRevision >= revision) return;
+    const snapshotRevision = requestedRevision;
+    const data = JSON.stringify(state);
     const temporary = `${stateFile}.${randomUUID()}.tmp`;
     try {
       await writeFile(temporary, data, { mode: 0o600 });
@@ -143,6 +160,7 @@ export function save(): Promise<void> {
       while (true) {
         try {
           await rename(temporary, stateFile);
+          persistedRevision = snapshotRevision;
           break;
         } catch (error) {
           const code = error instanceof Error && 'code' in error ? error.code : null;

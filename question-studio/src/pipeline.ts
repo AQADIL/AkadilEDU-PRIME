@@ -6,6 +6,8 @@ import { difficulties, type Difficulty, type GenerationJob, type StoredQuestion,
 import { BudgetError, RecoverableApiError, RequestPausedError, ResponsePollingError, UnidentifiedApiOutcomeError } from './provider.js';
 import { BatchContentError, questionFingerprint } from './assessment.js';
 import { nextRepair, repairQuestion } from './repair.js';
+import { RenderRetryError } from './render.js';
+import { checkTopicCompletion } from './topicCompletion.js';
 
 interface PipelineHandlers {
   generate(topic: Topic, job: GenerationJob, shouldPause: () => boolean): Promise<void>;
@@ -22,10 +24,10 @@ interface ActiveTask {
   result: Promise<TaskResult>;
 }
 
-function planDifficulty(count: number): Difficulty[] {
+function planDifficulty(count: number, topicId: string): Difficulty[] {
   const counts = Object.fromEntries(difficulties.map(difficulty => [difficulty,
-    state.questions.filter(question => question.validation.passed && question.difficulty === difficulty).length
-    + (state.jobs ?? []).reduce((sum, job) => sum + job.difficultyPlan.filter(value => value === difficulty).length, 0),
+    state.questions.filter(question => question.topic === topicId && question.validation.passed && question.difficulty === difficulty).length
+    + (state.jobs ?? []).filter(job => job.topicId === topicId).reduce((sum, job) => sum + job.difficultyPlan.filter(value => value === difficulty).length, 0),
   ])) as Record<Difficulty, number>;
   return Array.from({ length: count }, () => {
     const next = [...difficulties].sort((a, b) => counts[a] / state.config.difficultyWeights[a]
@@ -58,6 +60,9 @@ function recoverUnidentifiedCall(callId: string): boolean {
     const topic = state.topics.find(item => item.researchCallId === call.id);
     if (topic && !topic.researchUnavailable) { topic.researchUnavailable = true; changed = true; }
   }
+  for (const topic of state.topics) {
+    if (topic.progress?.audit?.callId === call.id) { delete topic.progress.audit; changed = true; }
+  }
   return changed;
 }
 
@@ -69,7 +74,7 @@ async function migrateSerialWork() {
     const count = state.pendingBatch?.questions.length || Math.min(state.config.batchSize, topic.target - topic.generated);
     state.jobs.push({
       id: randomUUID(), topicId: topic.id, count,
-      difficultyPlan: state.pendingBatch?.questions.map(question => question.difficulty) ?? planDifficulty(count),
+      difficultyPlan: state.pendingBatch?.questions.map(question => question.difficulty) ?? planDifficulty(count, topic.id),
       stage: state.pendingBatch ? 'review' : 'generation',
       ...(state.pendingBatch ? { batch: state.pendingBatch } : {}),
       ...(state.generationCallId ? { generationCallId: state.generationCallId } : {}),
@@ -78,16 +83,14 @@ async function migrateSerialWork() {
     state.generationCallId = null;
   }
   for (const call of state.calls) recoverUnidentifiedCall(call.id);
-  state.activeTopicId = null;
   await save();
 }
 
-function selectTopic(excluded: ReadonlySet<string>): Topic | undefined {
-  return state.topics.filter(topic => topic.eligible && !excluded.has(topic.id)
+function availableTopic(topic: Topic): boolean {
+  return topic.eligible
     && (!state.selectedTopicIds.length || state.selectedTopicIds.includes(topic.id))
     && (topic.failedBatches ?? 0) < config.maxTopicFailures && (topic.requestFailures ?? 0) < config.maxTopicFailures
-    && topic.generated < topic.target)
-    .sort((a, b) => a.generated - b.generated || a.id.localeCompare(b.id))[0];
+    && topic.progress?.status !== 'completed' && topic.progress?.status !== 'blocked';
 }
 
 async function archiveFailedJob(job: GenerationJob, error: unknown) {
@@ -125,11 +128,11 @@ export async function runParallelPipeline(handlers: PipelineHandlers, pauseReque
   state.error = null;
   try {
     await migrateSerialWork();
-    await event(`Параллельная работа: ${config.concurrency} потока. Каждая партия проходит независимую проверку.`, 'info');
+    await event(`Последовательно завершаю темы. До ${config.concurrency} параллельных задач внутри текущей темы; проверка сохранена.`, 'info');
     const launch = (id: string, topicId: string, operation: () => Promise<void>, job?: GenerationJob, question?: StoredQuestion) => {
       const result = operation().then((): TaskResult => ({ id, job, question }), (error: unknown): TaskResult => {
         if (!(error instanceof RequestPausedError || error instanceof UnidentifiedApiOutcomeError
-          || error instanceof ResponsePollingError || error instanceof RecoverableApiError || error instanceof BatchContentError)) {
+          || error instanceof ResponsePollingError || error instanceof RenderRetryError || error instanceof RecoverableApiError || error instanceof BatchContentError)) {
           halted = true;
           failure ??= error;
           budgetBlocked ||= error instanceof BudgetError;
@@ -139,8 +142,24 @@ export async function runParallelPipeline(handlers: PipelineHandlers, pauseReque
       active.set(id, { topicId, result });
     };
     while (!shouldPause() || active.size) {
+      let topic = state.topics.find(item => item.id === state.activeTopicId && availableTopic(item));
+      if (!topic && !active.size && !shouldPause()) {
+        topic = state.topics.find(availableTopic);
+        state.activeTopicId = topic?.id ?? null;
+        if (topic) {
+          topic.progress ??= { status: 'working' };
+          await event(`Текущая тема: ${topic.path.join(' / ')}. Завершаю её перед переходом к следующей.`, 'info', topic.id);
+        }
+      }
+      const excludedTopics = new Set(state.topics.filter(item => item.id !== topic?.id).map(item => item.id));
+      if (topic && !active.size && !shouldPause() && topic.generated >= config.minTopicQuestions
+        && !topic.progress?.curriculumRole && !state.jobs!.some(job => job.topicId === topic.id)) {
+        topic.target = topic.generated;
+        await save();
+      }
       while (!shouldPause() && active.size < config.concurrency) {
-        const queued = state.jobs!.find(job => !active.has(job.id) && (job.retryAt ?? 0) <= Date.now());
+        if (!topic) break;
+        const queued = state.jobs!.find(job => job.topicId === topic.id && !active.has(job.id) && (job.retryAt ?? 0) <= Date.now());
         if (queued) {
           delete queued.retryAt;
           launch(queued.id, queued.topicId, async () => {
@@ -155,32 +174,48 @@ export async function runParallelPipeline(handlers: PipelineHandlers, pauseReque
           }, queued);
           continue;
         }
-        const occupied = new Set([...state.jobs!.map(job => job.topicId), ...[...active.values()].map(task => task.topicId)]);
         const activeRepairs = [...active.keys()].filter(id => id.startsWith('repair:')).length;
-        const topic = selectTopic(occupied);
-        const repair = activeRepairs < config.repairConcurrency || !topic ? nextRepair(occupied) : undefined;
+        const activeRepairIds = new Set([...active.keys()].filter(id => id.startsWith('repair:')).map(id => id.slice('repair:'.length)));
+        const repair = topic.generated < topic.target && activeRepairs < config.repairConcurrency
+          ? nextRepair(excludedTopics, Date.now(), activeRepairIds) : undefined;
         if (repair) {
           launch(`repair:${repair.id}`, repair.topic, () => repairQuestion(repair, shouldPause), undefined, repair);
           continue;
         }
-        if (!topic) break;
+        if (topic.generated >= topic.target || state.jobs!.some(job => job.topicId === topic.id)) break;
         const count = Math.min(state.config.batchSize, topic.target - topic.generated);
         const job: GenerationJob = { id: randomUUID(), topicId: topic.id, count,
-          difficultyPlan: planDifficulty(count), stage: 'generation' };
+          difficultyPlan: planDifficulty(count, topic.id), stage: 'generation' };
         state.jobs!.push(job);
         await save();
       }
       if (!active.size) {
         if (shouldPause()) break;
-        const waitingRepair = nextRepair(new Set(), Number.POSITIVE_INFINITY);
-        if (state.jobs!.length || waitingRepair) {
-          const next = Math.min(...state.jobs!.map(job => job.retryAt ?? Date.now()), waitingRepair?.repair?.retryAt ?? Number.POSITIVE_INFINITY);
+        const topicJobs = state.jobs!.filter(job => job.topicId === topic?.id);
+        const waitingRepair = topic && topic.generated < topic.target ? nextRepair(excludedTopics, Number.POSITIVE_INFINITY) : undefined;
+        if (topicJobs.length || waitingRepair) {
+          const next = Math.min(...topicJobs.map(job => job.retryAt ?? Date.now()), waitingRepair?.repair?.retryAt ?? Number.POSITIVE_INFINITY);
           await delay(Math.max(1, Math.min(1000, next - Date.now())));
+          continue;
+        }
+        if (topic) {
+          try { await checkTopicCompletion(topic, shouldPause); }
+          catch (error) {
+            if (error instanceof BudgetError) throw error;
+            if (error instanceof RequestPausedError) break;
+            if (error instanceof UnidentifiedApiOutcomeError) recoverUnidentifiedCall(error.callId);
+            if (!(error instanceof UnidentifiedApiOutcomeError || error instanceof ResponsePollingError)) {
+              topic.requestFailures = (topic.requestFailures ?? 0) + 1;
+              if (error instanceof RecoverableApiError && topic.progress) delete topic.progress.audit;
+            }
+            await event(`${topic.name}: проверка покрытия отложена — ${safeError(error)}. Сохранённый результат не оплачивается повторно.`, 'warning', topic.id);
+            await delay(Math.min(config.recoveryBackoffMs, 10000));
+          }
           continue;
         }
         const deferred = state.topics.filter(topic => topic.eligible
           && (!state.selectedTopicIds.length || state.selectedTopicIds.includes(topic.id))
-          && ((topic.failedBatches ?? 0) >= config.maxTopicFailures || (topic.requestFailures ?? 0) >= config.maxTopicFailures));
+          && (topic.progress?.status === 'blocked' || (topic.failedBatches ?? 0) >= config.maxTopicFailures || (topic.requestFailures ?? 0) >= config.maxTopicFailures));
         state.status = deferred.length ? 'paused' : 'completed';
         await event(deferred.length ? `Отложено тем после лимита попыток: ${deferred.length}.`
           : 'План выполнен. Все принятые задания сохранены в Firebase.', deferred.length ? 'warning' : 'success');
@@ -189,18 +224,18 @@ export async function runParallelPipeline(handlers: PipelineHandlers, pauseReque
       const result = await Promise.race([...active.values()].map(task => task.result));
       active.delete(result.id);
       if (!result.error || result.error instanceof RequestPausedError) continue;
-      if (result.error instanceof UnidentifiedApiOutcomeError || result.error instanceof ResponsePollingError) {
+      if (result.error instanceof UnidentifiedApiOutcomeError || result.error instanceof ResponsePollingError || result.error instanceof RenderRetryError) {
         const error = result.error;
         if (error instanceof UnidentifiedApiOutcomeError) recoverUnidentifiedCall(error.callId);
         if (result.job) {
           result.job.stage = 'waiting';
-          result.job.retryAt = Date.now() + (error instanceof ResponsePollingError ? error.retryAfterMs : config.recoveryBackoffMs);
+          result.job.retryAt = Date.now() + (error instanceof ResponsePollingError || error instanceof RenderRetryError ? error.retryAfterMs : config.recoveryBackoffMs);
         }
         if (result.question) {
           if (!result.question.repair) throw new Error('У исправления отсутствует сохранённый этап');
-          result.question.repair.retryAt = Date.now() + (error instanceof ResponsePollingError ? error.retryAfterMs : config.recoveryBackoffMs);
+          result.question.repair.retryAt = Date.now() + (error instanceof ResponsePollingError || error instanceof RenderRetryError ? error.retryAfterMs : config.recoveryBackoffMs);
         }
-        await event(error instanceof UnidentifiedApiOutcomeError
+        await event(error instanceof RenderRetryError ? error.message : error instanceof UnidentifiedApiOutcomeError
           ? 'Ответ не подтверждён. Весь резерв сохранён; партия продолжится после паузы новым запросом.'
           : 'Ожидаю восстановления связи для сохранённого ответа. Повторная отправка не требуется.', 'warning', result.job?.topicId ?? result.question?.topic);
         continue;

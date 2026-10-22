@@ -58,7 +58,7 @@ export async function loadTopics() {
 }
 
 export async function saveQuestionToDatabase(question: StoredQuestion) {
-  const issues = questionPresentationIssues(question.translations);
+  const issues = questionPresentationIssues(question.translations, question.diagram);
   if (issues.length) throw new Error(`Оформление задания не прошло проверку: ${issues.join('; ')}`);
   const topic = await db.ref(`topics/${question.topic}`).get();
   if (topic.val()?.isLast !== true) throw new Error(`Topic is no longer a leaf: ${question.topic}`);
@@ -79,6 +79,7 @@ export async function saveQuestionToDatabase(question: StoredQuestion) {
     ...translations.kk, localImageUrl: null, translations,
     topic: question.topic, difficulty: question.difficulty, correctOption: question.correctOption,
     status: question.status === 'published' ? 'published' : 'draft',
+    publishedAt: question.publishedAt ?? existing.child('publishedAt').val() ?? null,
     schemaVersion: 2, diagram: question.diagram, validation: question.validation,
     generation: question.generation, fingerprint: question.fingerprint,
     createdAt: existing.val()?.createdAt || question.generation.createdAt, updatedAt: Date.now(),

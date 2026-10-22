@@ -90,9 +90,13 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
   const remainingTarget = state.topics.filter(t => t.eligible).reduce((sum, t) => sum + Math.max(0, t.target - t.generated), 0);
   const repairs = state.questions.filter(question => question.repair?.status === 'running');
   const accounting = budgetUsage(state.calls, state.budget);
-  const activeTopicIds = [...new Set([...(state.jobs ?? []).map(job => job.topicId), ...repairs.map(question => question.topic)])];
+  const activeTopicIds = state.activeTopicId ? [state.activeTopicId]
+    : [...new Set([...(state.jobs ?? []).map(job => job.topicId), ...repairs.map(question => question.topic)])];
+  const currentTopic = state.topics.find(topic => topic.id === state.activeTopicId);
+  const visibleJobs = state.activeTopicId ? (state.jobs ?? []).filter(job => job.topicId === state.activeTopicId) : state.jobs ?? [];
   return {
     ...state, calls: undefined, sourceText: undefined, pendingBatch: undefined, generationCallId: undefined, jobs: undefined,
+    topics: state.topics.map(topic => topic.progress ? { ...topic, progress: { ...topic.progress, audit: undefined } } : topic),
     budget: { ...state.budget, checkpoint: undefined,
       ...(state.budget.checkpoint ? { allowance: {
         source: state.budget.checkpoint.source, reportedSpent: state.budget.checkpoint.reportedSpent,
@@ -104,14 +108,19 @@ export function publicState(state: StudioState, config: PublicStateConfig) {
     ...(config.concurrency ? { pipeline: {
       concurrency: state.mode === 'parse' ? 1 : config.concurrency,
       activeRequests: state.calls.filter(call => call.status === 'reserved' || call.status === 'pending').length,
+      currentTopic: currentTopic ? { name: currentTopic.name, status: currentTopic.progress?.status } : null,
+      completedTopics: state.topics.filter(topic => topic.progress?.status === 'completed').length,
+      totalTopics: state.topics.filter(topic => topic.eligible).length,
       jobs: [
-        ...(state.jobs ?? []).map(job => ({ id: job.id, topicId: job.topicId,
+        ...visibleJobs.map(job => ({ id: job.id, topicId: job.topicId,
           topicName: state.topics.find(topic => topic.id === job.topicId)?.name ?? job.topicId,
           stage: job.stage, count: job.count, retryAt: job.retryAt })),
         ...repairs.map(question => ({ id: `repair:${question.id}`, topicId: question.topic,
           topicName: state.topics.find(topic => topic.id === question.topic)?.name ?? question.topic,
           stage: (question.repair?.retryAt ?? 0) > Date.now() ? 'waiting' : question.repair?.candidate ? 'review' : 'generation',
           count: 1, retryAt: question.repair?.retryAt })),
+        ...(currentTopic?.progress?.status === 'checking' ? [{ id: `coverage:${currentTopic.id}`, topicId: currentTopic.id,
+          topicName: currentTopic.name, stage: 'coverage', count: currentTopic.generated }] : []),
       ],
     } } : {}),
     model: config.model,

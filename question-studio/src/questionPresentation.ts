@@ -1,5 +1,37 @@
+import { schoolMathTerminology } from '../public/i18n.js';
+import type { Diagram } from './schema.js';
+
 export const maximumAnswerCharacters = 64;
+const schoolNotationPrefix = 'Школьные обозначения:';
 const ambiguousLogarithmBase = /\blog_(?:\(|\{|[A-Za-z0-9])|\blog[₀-₟]{2,}|\blog\s*\([^)]*,/u;
+
+export function hasSchoolNotationIssue(issues: readonly string[]): boolean {
+  return issues.some(issue => issue.includes(schoolNotationPrefix));
+}
+
+export function schoolNotationIssues(language: string, text: string): string[] {
+  if (language !== 'kk' && language !== 'ru' && language !== 'en') return [];
+  const terms = schoolMathTerminology[language];
+  const issues: string[] = [];
+  if (language !== 'en') {
+    if (/\b(?:gcd|gcf|hcf|lcm)\b/iu.test(text)) {
+      issues.push(`${schoolNotationPrefix} вместо gcd/gcf/hcf и lcm используйте ${terms.gcd} (${terms.gcdName}) и ${terms.lcm} (${terms.lcmName}), включая формулы на изображениях. Сохраните математический смысл.`);
+    }
+    if (/\b(?:tan|cot|arctan|arccot)\b/iu.test(text)) {
+      issues.push(`${schoolNotationPrefix} используйте привычные ${terms.tangent}, ${terms.cotangent}, arctg и arcctg вместо английских tan/cot/arctan/arccot.`);
+    }
+    if (/\b(?:min|max)\s*[({]/iu.test(text)) {
+      issues.push(`${schoolNotationPrefix} замените функции min/max понятными словами «${terms.minimum}»/«${terms.maximum}» или поясните выбор меньшего/большего числа обычным текстом без этих функций.`);
+    }
+  }
+  if (/\\(?:bmod|pmod|mod)\b|\b(?:mod|modulo)\b/iu.test(text)) {
+    issues.push(`${schoolNotationPrefix} не требуйте знания mod или формальных сравнений. Используйте «${terms.remainder}», делимость и понятное школьное рассуждение об остатках; сохраните все числа и смысл.`);
+  }
+  if (/\b(?:ceil|floor|argmin|argmax|atan2|pow)\b/iu.test(text)) {
+    issues.push(`${schoolNotationPrefix} замените программные/вузовские функции ceil/floor/argmin/argmax/atan2/pow школьной формулировкой и объясните нужное действие.`);
+  }
+  return issues.map(issue => `${language}: ${issue}`);
+}
 
 export function plainStatementIssues(text: string): string[] {
   const plain = text.replace(/\$\$[\s\S]*?\$\$|\$[^$\n]*?\$/g, ' ');
@@ -36,9 +68,17 @@ export function plainStatementIssues(text: string): string[] {
   return issues;
 }
 
-export function questionPresentationIssues(translations: Record<string, { text: string; options: readonly string[] }>): string[] {
+export function questionPresentationIssues(translations: Record<string, { text: string; options: readonly string[]; explanation?: string; hint?: string }>, diagram?: Diagram | null): string[] {
   const issues: string[] = [];
   for (const [language, content] of Object.entries(translations)) {
+    const localLanguage = language === 'kk' || language === 'ru' || language === 'en' ? language : null;
+    const diagramText = diagram && localLanguage ? [diagram.caption[localLanguage],
+      ...diagram.points.map(point => point.label[localLanguage]),
+      ...(diagram.angles ?? []).map(angle => angle.label[localLanguage]),
+      ...diagram.labels.map(label => label.text[localLanguage])] : [];
+    for (const text of [content.text, ...content.options, content.explanation, content.hint, ...diagramText]) {
+      if (text) issues.push(...schoolNotationIssues(language, text));
+    }
     issues.push(...plainStatementIssues(content.text).map(issue => `${language}: ${issue}`));
     for (const [index, option] of content.options.entries()) {
       if (ambiguousLogarithmBase.test(option)) {
@@ -49,5 +89,5 @@ export function questionPresentationIssues(translations: Record<string, { text: 
       }
     }
   }
-  return issues;
+  return [...new Set(issues)];
 }

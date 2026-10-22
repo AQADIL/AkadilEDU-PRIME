@@ -8,7 +8,10 @@ const messages = {
     idle: 'Готово к запуску', running: 'В работе', paused: 'На паузе', error: 'Остановлено из-за ошибки',
     budget_exhausted: 'Недостаточно свободного бюджета', completed: 'Работа завершена', model: 'Модель',
     modelPair: 'Создание: {generation} · Проверка: {review}',
-    parallelWork: 'Параллельная работа', parallelSummary: 'Тем одновременно: {concurrency} · Запросов: {requests}',
+    parallelWork: 'Работа по темам', parallelSummary: 'До {concurrency} задач · Запросов: {requests}',
+    topic_working: 'В работе', topic_checking: 'Проверка покрытия', topic_needs_work: 'Дополнение пробелов',
+    topic_completed: 'Готово', topic_blocked: 'Требует разбора',
+    currentTopic: '{name} · Готовых тем: {completed} / {total}', parallel_coverage: 'Проверка программы и навыков',
     parallel_research: 'Поиск источников', parallel_generation: 'Создание', parallel_review: 'Проверка',
     parallel_publishing: 'Сохранение в базу', parallel_waiting: 'Ожидание',
     parallelWaitingUntil: 'Повтор в {time}', parallelQuestionCount: 'Заданий: {count}',
@@ -77,3 +80,12 @@ export const questionLanguages = [
   { code: 'ru', label: 'Русский' },
   { code: 'en', label: 'English' },
 ];
+
+export const schoolMathTerminology = {
+  kk: { gcd: 'ЕҮОБ', gcdName: 'ең үлкен ортақ бөлгіш', lcm: 'ЕКОЕ', lcmName: 'ең кіші ортақ еселік',
+    tangent: 'tg', cotangent: 'ctg', remainder: 'бөлгендегі қалдық', minimum: 'ең кіші мән', maximum: 'ең үлкен мән' },
+  ru: { gcd: 'НОД', gcdName: 'наибольший общий делитель', lcm: 'НОК', lcmName: 'наименьшее общее кратное',
+    tangent: 'tg', cotangent: 'ctg', remainder: 'остаток при делении', minimum: 'наименьшее значение', maximum: 'наибольшее значение' },
+  en: { gcd: 'GCD', gcdName: 'greatest common divisor', lcm: 'LCM', lcmName: 'least common multiple',
+    tangent: 'tan', cotangent: 'cot', remainder: 'remainder when divided by', minimum: 'minimum value', maximum: 'maximum value' },
+};

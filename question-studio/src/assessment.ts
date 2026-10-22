@@ -44,8 +44,10 @@ export async function publishValidatedQuestion(question: StoredQuestion): Promis
       }
     }
     const status = config.autoPublish ? 'published' : question.status;
-    await saveQuestionToDatabase({ ...question, status });
+    const publishedAt = status === 'published' ? Date.now() : question.publishedAt;
+    await saveQuestionToDatabase({ ...question, status, ...(publishedAt ? { publishedAt } : {}) });
     question.status = status;
+    if (publishedAt) question.publishedAt = publishedAt;
     return true;
   } catch (error) {
     if (!(error instanceof QuestionRenderError)) throw error;

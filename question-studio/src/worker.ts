@@ -8,7 +8,7 @@ import { generationPrompt, reviewPrompt } from './prompts.js';
 import { generationSchema, reviewSchema, languages, difficulties, restoreGeneratedQuestion, type Difficulty, type StoredQuestion, type Topic, type GenerationJob } from './schema.js';
 import { runParallelPipeline } from './pipeline.js';
 import { saveQuestionToDatabase, uploadImage } from './database.js';
-import { renderQuestion } from './render.js';
+import { renderQuestion, RenderRetryError } from './render.js';
 import { researchTopic } from './research.js';
 import { assessQuestion, BatchContentError, publishValidatedQuestion, questionFingerprint } from './assessment.js';
 import { nextRepair, repairQuestion } from './repair.js';
@@ -41,9 +41,11 @@ export async function publishQuestions(ids: string[]) {
     const question = state.questions.find(q => q.id === id);
     if (!question || !question.validation.passed) throw new Error('Публиковать можно только проверенные задания');
     const original = question.status;
+    const originalPublishedAt = question.publishedAt;
     question.status = 'published';
+    question.publishedAt = Date.now();
     try { await saveQuestionToDatabase(question); }
-    catch (error) { question.status = original; throw error; }
+    catch (error) { question.status = original; question.publishedAt = originalPublishedAt; throw error; }
     await save();
   }
   await event(`Опубликовано заданий: ${ids.length}.`);
@@ -79,6 +81,8 @@ async function generateBatch(topic: Topic, job?: GenerationJob, shouldPause: () 
     mode: state.mode, topic: { id: topic.id, path: topic.path, target: topic.target,
       targetPlanned: topic.targetPlanned, goals: topic.coverageGoals || [] },
     count, difficultyPlan: plan, difficultyWeights: state.config.difficultyWeights,
+    questionCountLimits: { minimum: config.minTopicQuestions, maximum: config.maxTopicQuestions },
+    missingSkills: topic.progress?.missingSkills ?? [],
     previousQuestions: state.questions.filter(q => q.topic === topic.id).slice(-40).map(q => q.translations.kk.text),
     previousFeedback: state.questions.filter(q => q.topic === topic.id && !q.validation.passed).slice(-5)
       .map(q => ({ difficulty: q.difficulty, issues: q.validation.issues })),
@@ -105,7 +109,8 @@ async function generateBatch(topic: Topic, job?: GenerationJob, shouldPause: () 
     throw new Error('Не удалось подтвердить границу обработанного текста; исходник сохранён');
   }
   if (!topic.targetPlanned) {
-    topic.target = Math.max(result.data.recommendedTarget, topic.generated + result.data.questions.length);
+    topic.target = Math.max(topic.generated + result.data.questions.length,
+      Math.min(config.maxTopicQuestions, Math.max(config.minTopicQuestions, result.data.recommendedTarget)));
     topic.targetPlanned = true;
     topic.rationale = result.data.rationale;
     topic.coverageGoals = result.data.coverageGoals;
@@ -254,8 +259,9 @@ async function serialLoop() {
           while (!pauseRequested && Date.now() < until) await delay(Math.min(1000, until - Date.now()));
           continue;
         }
-        if (error instanceof ResponsePollingError) {
-          await event('Связь с OpenAI временно недоступна. Ожидаю восстановления; оплаченный запрос сохранён и повторно не отправляется.', 'warning');
+        if (error instanceof ResponsePollingError || error instanceof RenderRetryError) {
+          await event(error instanceof RenderRetryError ? error.message
+            : 'Связь с OpenAI временно недоступна. Ожидаю восстановления; оплаченный запрос сохранён и повторно не отправляется.', 'warning');
           const until = Date.now() + error.retryAfterMs;
           while (!pauseRequested && Date.now() < until) await delay(Math.min(1000, until - Date.now()));
           continue;
@@ -317,7 +323,7 @@ export async function pauseWorker() {
 }
 export async function waitForWorker() { await running; }
 export const startSchema = z.strictObject({
-  perTopic: z.number().int().min(10).max(200),
+  perTopic: z.number().int().min(config.minTopicQuestions).max(config.maxTopicQuestions),
   batchSize: z.number().int().min(1).max(5),
   mode: z.enum(['generate', 'parse']),
   sourceText: z.string().max(200000).optional(),

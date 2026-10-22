@@ -1,7 +1,19 @@
 import { maximumAnswerCharacters } from './questionPresentation.js';
+import { schoolMathTerminology } from '../public/i18n.js';
 
-const presentationRequirements = `Answer options must be one short line each, ideally at most 40 characters and NEVER more than ${maximumAnswerCharacters} characters in ANY of kk, ru or en. Count each language separately. Ask one focused question with a compact number, expression, interval or short phrase as its answer. Do not put long classifications, multiple parameter cases or whole explanations in options. If a proposed option would require complex typography such as a compound logarithm base, reformulate the task so answers are simple values or intervals. Never compress a complex base into log_(...) or log₍...₎ in an option. Reformulate the task rather than truncating any answer or hiding options in an image. All options, explanations and hints remain plain Unicode text.
-Plain Unicode is allowed only for genuinely short readable statement expressions. Every statement fraction must use delimited LaTeX with \\frac, never a slash division. Systems, nested radicals, compound exponents, long subscripts, deeply nested expressions and symbol-dense formulas MUST use proper LaTeX image layout. Logarithms with variable or compound bases MUST use \\log_{x-1}\\left(x^2-5x+6\\right) or the mathematically correct equivalent inside a delimited LaTeX block. Never use log_(x-1), log₍ₓ₊₁₎ or similar compressed Unicode bases in statements. Clearly separate the base from the entire argument with parentheses. Write for a student seeing this notation for the first time. A screenshot of an unreadable Unicode expression is not sufficient. Put the translated prose instruction first, then the mathematical block at the end; keep this block identical across languages whenever mathematically possible. Do not append localized prose after the shared block. Verify that converting notation preserves every grouping, bound, subscript, domain restriction and mathematical meaning.`;
+const schoolTerminologyRequirements = `Write for a Kazakhstan secondary-school pupil, not a programmer or university mathematician.
+Use the native school terminology in EVERY statement, formula image, option, explanation, hint and diagram label:
+${JSON.stringify(schoolMathTerminology)}
+Kazakh gcd is ЕҮОБ (not ЕҰОБ); use the full local name when clarification helps. Never leave gcd/gcf/hcf/lcm in kk/ru, including inside LaTeX operator names. Use local tg/ctg/arctg/arcctg in kk/ru instead of tan/cot/arctan/arccot; standard sin/cos/log/ln and neutral point labels remain valid.
+Inside a LaTeX block, wrap Cyrillic abbreviations in \\text{...}, for example \\text{ЕҮОБ} or \\text{НОК}, so they render correctly. Prefer native prose when the operation can be stated clearly without adding words to the image.
+Do NOT write mod, modulo, bmod, pmod or congruence notation to explain remainders in ANY language. Say what remainder division gives, explain divisibility or repeating patterns of remainders with ordinary school steps. Never assume knowledge of modular arithmetic, modular inverses, Fermat/Euler theorems or the Chinese remainder theorem.
+Do not use min(...), max(...), ceil, floor, argmin, argmax, atan2 or pow as unexplained shortcuts. Ask for the smaller/larger value, a required integer, a power or the relevant elementary operation in native words. Do not use advanced notation merely to make a task appear difficult.
+Prefer clear native prose that permits a neutral shared figure. A formula containing a language-specific operator is NOT language-neutral: either move its meaning into translated prose or use correctly localized formula images. Never retain English operators just to reuse one image.
+This is a single-answer training bank, not a complete official exam paper. Keep reasoning within secondary-school algebra, equations and systems, inequalities and systems, progressions, elementary mathematical analysis and modelling, plane/solid geometry and vectors. For mathematical-literacy topics, use school-level numerical/logical reasoning, percentages, statistics, elementary combinatorics/probability, relationships, tables/charts and practical geometry. High difficulty must combine school concepts, not require olympiad or university machinery. Base questions use familiar procedures; medium questions require interpretation and a meaningful chain of school steps; hard questions combine several school concepts. Do not claim official certification or complete specification coverage.`;
+
+const presentationRequirements = `${schoolTerminologyRequirements}
+Answer options must be one short line each, ideally at most 40 characters and NEVER more than ${maximumAnswerCharacters} characters in ANY of kk, ru or en. Count each language separately. Ask one focused question with a compact number, expression, interval or short phrase as its answer. Do not put long classifications, multiple parameter cases or whole explanations in options. If a proposed option would require complex typography such as a compound logarithm base, reformulate the task so answers are simple values or intervals. Never compress a complex base into log_(...) or log₍...₎ in an option. Reformulate the task rather than truncating any answer or hiding options in an image. All options, explanations and hints remain plain Unicode text.
+Plain Unicode is allowed only for genuinely short readable statement expressions. Every statement fraction must use delimited LaTeX with \\frac, never a slash division. Systems, nested radicals, compound exponents, long subscripts, deeply nested expressions and symbol-dense formulas MUST use proper LaTeX image layout. Logarithms with variable or compound bases MUST use \\log_{x-1}\\left(x^2-5x+6\\right) or the mathematically correct equivalent inside a delimited LaTeX block. Never use log_(x-1), log₍ₓ₊₁₎ or similar compressed Unicode bases in statements. Clearly separate the base from the entire argument with parentheses. Write for a student seeing this notation for the first time. A screenshot of an unreadable Unicode expression is not sufficient. Put the translated prose instruction first, then the mathematical block at the end; keep this block identical across languages only when its notation is genuinely language-neutral. Do not append localized prose after the shared block. Verify that converting notation preserves every grouping, bound, subscript, domain restriction and mathematical meaning.`;
 
 export const generationPrompt = `You are a senior mathematics assessment author for Kazakhstan's UNT/ҰБТ.
 ${presentationRequirements}
@@ -23,8 +35,8 @@ Also use delimited LaTeX for nested radicals, systems, stacked expressions and o
 plain-text layout would be difficult to read. These statement formulas are rendered into a PNG image.
 Keep translated instructions OUTSIDE the image. When a statement can be separated into prose and a
 formula, put all localized instructions first and then the standalone formula block at the END of text,
-with no prose after it. Use exactly the same formula notation and delimiters in kk, ru and en. The renderer
-will show the translated prefix separately and reuse ONE formula image across all three languages.
+with no prose after it. Use identical formula blocks only when all notation is genuinely language-neutral.
+Reuse one image for identical blocks; language-specific operators require correctly localized images.
 For example, translate the instruction "Solve the equation:" but keep the equation block identical.
 Keep geometry instructions outside the drawing; prefer shared numeric values and neutral point labels.
 Only embed translated words in a visual when essential. If prose and formulas cannot be separated without
@@ -64,8 +76,9 @@ Use null for diagram only if the question works fully as text. Questions needing
 must instead be reformulated as mathematically complete supported diagrams, never omit required content.
 Difficulty: easy = direct concept/application; medium = meaningful 2-4 step reasoning; hard = nontrivial
 combination, parameter/domain reasoning, or nuanced application within school curriculum.
-For a topic's first batch, recommend a question-bank target (8 to 40) based on distinct worthwhile
-learning objectives in this precise leaf topic. Do NOT assign the same number to all topics.
+For a topic's first batch, recommend a compact target within the supplied questionCountLimits based on distinct worthwhile
+learning objectives in this precise leaf topic. Prefer the lower end for prerequisites and narrow skills.
+Do NOT assign the same number to all topics. Address supplied missingSkills before adding unrelated variations.
 Provide rationale and coverageGoals in Russian. No padded quota of trivial duplicates. For later batches,
 use the existing target and goals and address gaps in the already generated questions.
 Generation mode: use only the requested topic and exact requested difficulty counts.
@@ -98,8 +111,8 @@ Options, explanations and hints must always remain plain Unicode and ordinary le
 or images. Use / with explicit parentheses for fractions and short readable steps in these fields.
 Keep translated instructions OUTSIDE the image. When a statement can be separated into prose and a
 formula, put all localized instructions first and then the standalone formula block at the END of text,
-with no prose after it. Use exactly the same formula notation and delimiters in kk, ru and en. The renderer
-will show the translated prefix separately and reuse ONE formula image across all three languages.
+with no prose after it. Use identical formula blocks only when all notation is genuinely language-neutral.
+Reuse one image for identical blocks; language-specific operators require correctly localized images.
 For example, translate the instruction "Solve the equation:" but keep the equation block identical.
 Keep geometry instructions outside the drawing; prefer shared numeric values and neutral point labels.
 Only embed translated words in a visual when essential. If prose and formulas cannot be separated without

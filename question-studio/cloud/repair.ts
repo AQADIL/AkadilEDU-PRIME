@@ -5,14 +5,16 @@ import { runStructured, RecoverableApiError, RequestPausedError } from './provid
 import { generatedQuestionSchema, generatedQuestionContent as questionInput, restoreGeneratedQuestion, reviewSchema, type StoredQuestion } from '../src/schema.js';
 import { repairPrompt, reviewPrompt } from '../src/prompts.js';
 import { assessQuestion, cloudNotation, BatchContentError, publishValidatedQuestion, questionFingerprint } from './assessment.js';
+import { hasSchoolNotationIssue } from '../src/questionPresentation.js';
 
 const repairSchema = z.strictObject({ question: generatedQuestionSchema });
 export function nextRepair(): StoredQuestion | undefined {
-  return state.questions.find(question => !question.validation.passed
+  const candidates = state.questions.filter(question => !question.validation.passed
     && (!state.selectedTopicIds.length || state.selectedTopicIds.includes(question.topic))
     && state.topics.some(topic => topic.id === question.topic && topic.eligible)
     && question.repair?.status !== 'exhausted' && question.repair?.status !== 'completed'
     && (question.repair?.status === 'running' || (question.repair?.attempts || 0) < config.repairMaxAttempts));
+  return candidates.find(question => hasSchoolNotationIssue(question.validation.issues)) ?? candidates[0];
 }
 export function repairQuestion(question: StoredQuestion, shouldPause: () => boolean): void {
   question.repair ??= { attempts: 0, status: 'pending', history: [{ attempt: 0,

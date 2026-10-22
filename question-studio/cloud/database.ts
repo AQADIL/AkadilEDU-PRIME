@@ -97,7 +97,7 @@ export function loadTopics(): void {
 export function saveQuestionToDatabase(question: StoredQuestion): void {
   const topic = topicSchema.parse(requestDatabase(`topics/${question.topic}`));
   if (topic.isLast !== true) throw new Error(`Topic is no longer a leaf: ${question.topic}`);
-  const existing = z.object({ generation: z.object({ runId: z.string() }).optional(), createdAt: z.number().optional() })
+  const existing = z.object({ generation: z.object({ runId: z.string() }).optional(), createdAt: z.number().optional(), publishedAt: z.number().optional() })
     .passthrough().nullable().parse(requestDatabase(`questions/${question.id}`));
   if (existing && existing.generation?.runId !== question.generation.runId) throw new Error('Question ID belongs to another generation run');
   const translations = Object.fromEntries(languages.map(language => {
@@ -108,7 +108,8 @@ export function saveQuestionToDatabase(question: StoredQuestion): void {
     topic: question.topic, difficulty: question.difficulty, correctOption: question.correctOption,
     status: question.status === 'published' ? 'published' : 'draft', schemaVersion: 2,
     diagram: question.diagram, validation: question.validation, generation: question.generation,
-    fingerprint: question.fingerprint, createdAt: existing?.createdAt || question.generation.createdAt, updatedAt: Date.now() };
+    fingerprint: question.fingerprint, publishedAt: question.publishedAt ?? existing?.publishedAt ?? null,
+    createdAt: existing?.createdAt || question.generation.createdAt, updatedAt: Date.now() };
   requestDatabase('', 'patch', { [`questions/${question.id}`]: content,
     [`questionsByTopic/${question.topic}/${question.id}`]: true });
 }

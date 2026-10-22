@@ -6,16 +6,20 @@ import { generatedQuestionSchema, generatedQuestionContent as questionInput, res
 import { repairPrompt, reviewPrompt } from './prompts.js';
 import { assessQuestion, BatchContentError, publishValidatedQuestion, questionFingerprint } from './assessment.js';
 import { QuestionConflictError } from './database.js';
+import { RenderRetryError } from './render.js';
+import { hasSchoolNotationIssue } from './questionPresentation.js';
 
 const repairSchema = z.strictObject({ question: generatedQuestionSchema });
-export function nextRepair(excludedTopics: ReadonlySet<string> = new Set(), readyAt = Date.now()): StoredQuestion | undefined {
-  return state.questions.find(question => !question.validation.passed
+export function nextRepair(excludedTopics: ReadonlySet<string> = new Set(), readyAt = Date.now(), excludedIds: ReadonlySet<string> = new Set()): StoredQuestion | undefined {
+  const candidates = state.questions.filter(question => !question.validation.passed
+    && !excludedIds.has(question.id)
     && !excludedTopics.has(question.topic)
     && (question.repair?.retryAt ?? 0) <= readyAt
     && (!state.selectedTopicIds.length || state.selectedTopicIds.includes(question.topic))
     && state.topics.some(topic => topic.id === question.topic && topic.eligible)
     && question.repair?.status !== 'exhausted' && question.repair?.status !== 'completed'
     && (question.repair?.status === 'running' || (question.repair?.attempts || 0) < config.repairMaxAttempts));
+  return candidates.find(question => hasSchoolNotationIssue(question.validation.issues)) ?? candidates[0];
 }
 export async function repairQuestion(question: StoredQuestion, shouldPause: () => boolean): Promise<void> {
   question.repair ??= { attempts: 0, status: 'pending', history: [{ attempt: 0,
@@ -96,6 +100,7 @@ export async function repairQuestion(question: StoredQuestion, shouldPause: () =
       : `Исправление ${question.id.slice(0, 8)} ${repair.status === 'exhausted' ? 'отложено после лимита попыток' : 'возвращено на доработку'}: ${question.validation.issues.join('; ')}`,
     passed ? 'success' : 'warning', question.topic);
   } catch (error) {
+    if (error instanceof RenderRetryError) throw error;
     if (error instanceof QuestionConflictError) {
       repair.status = 'exhausted';
       repair.history.push({ attempt: repair.attempts, issues: [safeError(error)] });

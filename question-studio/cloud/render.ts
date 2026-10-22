@@ -312,7 +312,7 @@ function renderImageQuestion(question: StoredQuestion): Record<Language, string>
 }
 
 export function renderQuestion(question: StoredQuestion): Record<Language, string> | null {
-  const issues = questionPresentationIssues(question.translations);
+  const issues = questionPresentationIssues(question.translations, question.diagram);
   if (issues.length) throw new QuestionRenderError(issues.join('; '));
   try { return renderImageQuestion(question); }
   catch (error) {

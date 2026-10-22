@@ -3,9 +3,10 @@ import { z } from 'zod';
 import { db, updateQuestionAtomically } from './database.js';
 import { config } from './config.js';
 import { state, event, save } from './store.js';
-import { restoreGeneratedQuestion, generatedQuestionContent, languages, type GeneratedQuestion, type StoredQuestion } from './schema.js';
+import { restoreGeneratedQuestion, generatedQuestionContent, languages, type ApiCall, type GeneratedQuestion, type StoredQuestion } from './schema.js';
 import { questionPresentationIssues } from './questionPresentation.js';
 import { statementPresentation } from './statementPresentation.js';
+import type { DataSnapshot } from 'firebase-admin/database';
 
 const recordSchema = z.object({
   generation: z.object({ runId: z.string(), responseId: z.string() }),
@@ -14,7 +15,14 @@ const recordSchema = z.object({
   translations: z.record(z.string(), z.object({ text: z.string(), options: z.array(z.string()),
     explanation: z.string(), hint: z.string(), imageUrl: z.string().optional() })),
 });
-const presentationIssue = /Дробь в условии|Степень или индекс|Длинные индексы|Основание логарифма|Корень со сложным|Условие содержит|вариант \d+/u;
+const presentationIssue = /Дробь в условии|Степень или индекс|Длинные индексы|Основание логарифма|Корень со сложным|Условие содержит|вариант \d+|Школьные обозначения:/u;
+const publishedRecordSchema = recordSchema.extend({
+  status: z.literal('published'),
+  validation: z.object({ passed: z.literal(true), issues: z.array(z.string()) }),
+  generation: recordSchema.shape.generation.extend({ model: z.string().min(1), reviewModel: z.string().optional(),
+    reviewResponseId: z.string().min(1), createdAt: z.number().int().positive(), researchResponseId: z.string().optional(),
+    referenceSources: z.array(z.object({ url: z.string(), title: z.string() })).optional() }),
+});
 
 function canonical(value: unknown): unknown {
   if (Array.isArray(value)) return value.length ? value.map(canonical) : null;
@@ -52,8 +60,61 @@ function recoverOriginal(question: StoredQuestion, responseId: string): Generate
   try { return restoreGeneratedQuestion(candidate); } catch { return; }
 }
 
+export async function queueQuestionRepair(question: StoredQuestion, issues: string[],
+  options: { original?: GeneratedQuestion; completedReview?: ApiCall } = {}): Promise<boolean> {
+  const revision = Date.now();
+  const source = generatedQuestionContent(question);
+  const result = await updateQuestionAtomically(db.ref(`questions/${question.id}`), current => {
+    if (!matchesSource(current, source, question) || !current || typeof current !== 'object') return;
+    return { ...current, status: 'draft', validation: { passed: false, issues }, updatedAt: revision };
+  });
+  if (!result.committed) {
+    await event(`Задание ${question.id.slice(0, 8)} изменено вне студии или удалено; автоматическая замена пропущена.`, 'warning', question.topic);
+    return false;
+  }
+  const history = [...(question.repair?.history ?? []), { attempt: 0, issues: [...issues],
+    generationResponseId: question.generation.responseId, reviewResponseId: question.generation.reviewResponseId }];
+  question.status = 'rejected';
+  question.validation = { passed: false, issues };
+  question.repair = { attempts: 0, status: options.completedReview ? 'running' : 'pending', history,
+    originalQuestion: options.original ?? source, databaseRevision: revision,
+    ...(options.completedReview ? { candidate: source, generationCallId: options.completedReview.id } : {}) };
+  return true;
+}
+
+async function recoverPublishedJobs(snapshot: DataSnapshot): Promise<void> {
+  let recovered = 0;
+  for (const job of state.jobs ?? []) {
+    if (!job.batch) continue;
+    const call = state.calls.find(item => item.id === job.batch!.generationCallId);
+    if (!call?.responseId) continue;
+    for (const [index, generated] of job.batch.questions.entries()) {
+      const id = createHash('sha256').update(`${state.runId}:${call.responseId}:${index}`).digest('hex').slice(0, 40);
+      if (state.questions.some(question => question.id === id)) continue;
+      const stored = snapshot.child(id).val() as unknown;
+      const parsed = publishedRecordSchema.safeParse(stored);
+      if (!parsed.success || parsed.data.generation.runId !== state.runId
+        || parsed.data.generation.responseId !== call.responseId || !matchesSource(stored, generated)) continue;
+      const source = restoreGeneratedQuestion(generated);
+      const translations = { ...source.translations } as StoredQuestion['translations'];
+      for (const language of languages) {
+        const presentation = statementPresentation(source.translations[language].text);
+        translations[language] = { ...source.translations[language],
+          imageContainsStatement: presentation.containsStatement, displayText: presentation.displayText,
+          ...(parsed.data.translations[language]?.imageUrl ? { imageUrl: parsed.data.translations[language]!.imageUrl } : {}) };
+      }
+      state.questions.push({ id, topic: source.primaryTopicId, difficulty: source.difficulty,
+        correctOption: source.correctOption, diagram: source.diagram, translations, status: 'published',
+        fingerprint: parsed.data.fingerprint, validation: parsed.data.validation, generation: parsed.data.generation });
+      recovered++;
+    }
+  }
+  if (recovered) await event(`Восстановлены опубликованные задания незавершённых партий: ${recovered}. Повторная генерация не требуется.`, 'info');
+}
+
 export async function queuePresentationRepairs(): Promise<void> {
   const snapshot = await db.ref('questions').get();
+  await recoverPublishedJobs(snapshot);
   const recheck = new Set<string>();
   for (const question of state.questions) {
     const repair = question.repair;
@@ -97,33 +158,17 @@ export async function queuePresentationRepairs(): Promise<void> {
   }
   await save();
   const candidates = state.questions.filter(question => question.validation.passed)
-    .map(question => ({ question, issues: questionPresentationIssues(question.translations) }))
+    .map(question => ({ question, issues: questionPresentationIssues(question.translations, question.diagram) }))
     .map(candidate => recheck.has(candidate.question.id) ? { ...candidate,
       issues: [...candidate.issues, 'Повторно сравните исправленное задание с неизменяемым исходником; при исправлении только оформления математический смысл должен сохраняться.'] } : candidate)
     .filter(candidate => candidate.issues.length);
   let queued = 0;
   for (let offset = 0; offset < candidates.length; offset += config.concurrency) {
     await Promise.all(candidates.slice(offset, offset + config.concurrency).map(async ({ question, issues }) => {
-      const revision = Date.now();
-      const source = generatedQuestionContent(question);
-      const result = await updateQuestionAtomically(db.ref(`questions/${question.id}`), current => {
-        if (!matchesSource(current, source, question) || !current || typeof current !== 'object') return;
-        return { ...current, status: 'draft', validation: { passed: false, issues }, updatedAt: revision };
-      });
-      if (!result.committed) {
-        await event(`Задание ${question.id.slice(0, 8)} изменено вне студии или удалено; автоматическая замена пропущена.`, 'warning', question.topic);
-        return;
-      }
       const completedReview = recheck.has(question.id) ? state.calls.find(call => call.kind === 'repair' && call.responseId === question.generation.responseId) : undefined;
-      const original = recheck.has(question.id) ? question.repair!.originalQuestion! : source;
-      const history = [...(question.repair?.history ?? []), { attempt: 0, issues: [...issues],
-        generationResponseId: question.generation.responseId, reviewResponseId: question.generation.reviewResponseId }];
-      question.status = 'rejected';
-      question.validation = { passed: false, issues };
-      question.repair = { attempts: 0, status: completedReview ? 'running' : 'pending', history,
-        originalQuestion: original, databaseRevision: revision,
-        ...(completedReview ? { candidate: source, generationCallId: completedReview.id } : {}) };
-      queued++;
+      if (await queueQuestionRepair(question, issues, {
+        original: recheck.has(question.id) ? question.repair!.originalQuestion! : undefined, completedReview,
+      })) queued++;
     }));
     await save();
   }
