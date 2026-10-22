@@ -151,12 +151,13 @@ export async function runParallelPipeline(handlers: PipelineHandlers, pauseReque
           continue;
         }
         const occupied = new Set([...state.jobs!.map(job => job.topicId), ...[...active.values()].map(task => task.topicId)]);
-        const repair = nextRepair(occupied);
+        const activeRepairs = [...active.keys()].filter(id => id.startsWith('repair:')).length;
+        const topic = selectTopic(occupied);
+        const repair = activeRepairs < config.repairConcurrency || !topic ? nextRepair(occupied) : undefined;
         if (repair) {
           launch(`repair:${repair.id}`, repair.topic, () => repairQuestion(repair, shouldPause), undefined, repair);
           continue;
         }
-        const topic = selectTopic(occupied);
         if (!topic) break;
         const count = Math.min(state.config.batchSize, topic.target - topic.generated);
         const job: GenerationJob = { id: randomUUID(), topicId: topic.id, count,

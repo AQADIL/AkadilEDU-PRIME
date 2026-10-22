@@ -27,16 +27,13 @@ export function assessQuestion(question: GeneratedQuestion, verdict: Verdict, ex
   }
   return [...new Set([...issues, ...verdict.issues])];
 }
-let publicationQueue = Promise.resolve();
-export function publishValidatedQuestion(question: StoredQuestion): Promise<boolean> {
-  const operation = publicationQueue.then(() => publishQuestion(question));
-  publicationQueue = operation.then(() => undefined, () => undefined);
-  return operation;
-}
-async function publishQuestion(question: StoredQuestion): Promise<boolean> {
+let renderQueue = Promise.resolve();
+export async function publishValidatedQuestion(question: StoredQuestion): Promise<boolean> {
   if (!question.validation.passed) return false;
   try {
-    const images = await renderQuestion(question);
+    const rendering = renderQueue.then(() => renderQuestion(question));
+    renderQueue = rendering.then(() => undefined, () => undefined);
+    const images = await rendering;
     if (images) {
       const uploaded = new Map<string, string>();
       for (const language of languages) {
@@ -46,8 +43,9 @@ async function publishQuestion(question: StoredQuestion): Promise<boolean> {
         question.translations[language].imageUrl = url;
       }
     }
-    if (config.autoPublish) question.status = 'published';
-    await saveQuestionToDatabase(question);
+    const status = config.autoPublish ? 'published' : question.status;
+    await saveQuestionToDatabase({ ...question, status });
+    question.status = status;
     return true;
   } catch (error) {
     if (!(error instanceof QuestionRenderError)) throw error;

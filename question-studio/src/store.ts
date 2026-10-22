@@ -107,14 +107,24 @@ let writes = Promise.resolve();
 export function save(): Promise<void> {
   state.budget.spent = state.calls.reduce((sum, call) => sum + call.cost, 0);
   state.budget.reserved = state.calls.filter(call => call.status !== 'settled').reduce((sum, call) => sum + call.reserved, 0);
+  const countsByTopic = new Map<string, number>();
+  let generated = 0;
+  let published = 0;
+  for (const question of state.questions) {
+    if (question.validation.passed) {
+      generated++;
+      countsByTopic.set(question.topic, (countsByTopic.get(question.topic) ?? 0) + 1);
+    }
+    if (question.status === 'published') published++;
+  }
   state.totals = {
     eligible: state.topics.filter(t => t.eligible).length,
-    generated: state.questions.filter(q => q.validation.passed).length,
-    published: state.questions.filter(q => q.status === 'published').length,
-    rejected: state.questions.filter(q => !q.validation.passed).length,
+    generated,
+    published,
+    rejected: state.questions.length - generated,
   };
   for (const topic of state.topics) {
-    topic.generated = state.questions.filter(q => q.topic === topic.id && q.validation.passed).length;
+    topic.generated = countsByTopic.get(topic.id) ?? 0;
     if (!topic.targetPlanned) topic.target = topic.eligible ? state.config.perTopic : 0;
   }
   const data = JSON.stringify(state);
