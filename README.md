@@ -1,6 +1,6 @@
 <p align="center">
   <a href="https://github.com/AQADIL/AkadilEDU-PRIME">
-    <img src="admin-mini-app/public/prime.png" alt="AkadilEDU PRIME logo" width="150">
+    <img src="assets/brand/prime-transparent.png" alt="AkadilEDU PRIME logo" width="150">
   </a>
 </p>
 
