@@ -378,7 +378,8 @@ function renderPipeline() {
   currentTopicLabel.textContent = progress.currentTopic ? t('currentTopic', {
     name: progress.currentTopic.name, completed: progress.completedTopics, total: progress.totalTopics,
   }) : '';
-  replaceWhenChanged('pipeline', pipelineJobs, progress.jobs, () => progress.jobs.map(job => {
+  const currentJobs = state.activeTopicId ? progress.jobs.filter(job => job.topicId === state.activeTopicId) : progress.jobs;
+  replaceWhenChanged('pipeline', pipelineJobs, currentJobs, () => currentJobs.map(job => {
     const row = element('li', 'pipeline-job');
     row.dataset.stage = job.stage;
     const topic = state.topics.find(item => item.id === job.topicId);
