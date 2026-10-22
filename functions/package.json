@@ -1,6 +1,7 @@
 {
   "name": "akadiledu-functions",
   "version": "1.0.0",
+  "license": "UNLICENSED",
   "description": "Firebase Cloud Functions for AkadilEDU",
   "main": "index.js",
   "scripts": {

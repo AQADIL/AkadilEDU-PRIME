@@ -1,6 +1,8 @@
 {
   "name": "akadiledu-bot",
   "version": "1.0.0",
+  "private": true,
+  "license": "UNLICENSED",
   "description": "Telegram bot for ҰБТ Mathematics learning platform",
   "main": "index.js",
   "scripts": {
