@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { config } from './config.js';
 import { state, save } from './store.js';
 import { languages, type StoredQuestion, type Topic } from './schema.js';
+import { questionPresentationIssues } from './questionPresentation.js';
 
 const account = JSON.parse(await readFile(config.credentials, 'utf8')) as object;
 const app = initializeApp({ credential: cert(account), databaseURL: config.databaseURL, storageBucket: config.storageBucket }, 'question-studio');
@@ -43,6 +44,8 @@ export async function loadTopics() {
 }
 
 export async function saveQuestionToDatabase(question: StoredQuestion) {
+  const issues = questionPresentationIssues(question.translations);
+  if (issues.length) throw new Error(`Оформление задания не прошло проверку: ${issues.join('; ')}`);
   const topic = await db.ref(`topics/${question.topic}`).get();
   if (topic.val()?.isLast !== true) throw new Error(`Topic is no longer a leaf: ${question.topic}`);
   const reference = db.ref(`questions/${question.id}`);

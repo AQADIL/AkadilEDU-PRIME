@@ -7,6 +7,7 @@ import { languages, type Language, type StoredQuestion } from './schema.js';
 import { diagramSvg } from './diagram.js';
 import { arrangeDiagramLabels } from './diagramLayout.js';
 import { statementPresentation } from './statementPresentation.js';
+import { questionPresentationIssues } from './questionPresentation.js';
 
 let browser: Browser | undefined;
 export class QuestionRenderError extends Error {}
@@ -15,6 +16,8 @@ const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;'
 export async function closeRenderer() { await browser?.close(); browser = undefined; }
 
 export async function renderQuestion(question: StoredQuestion): Promise<Record<Language, string> | null> {
+  const issues = questionPresentationIssues(question.translations);
+  if (issues.length) throw new QuestionRenderError(issues.join('; '));
   if (!question.diagram && !languages.some(lang => /\$|\\[A-Za-z]+/.test(question.translations[lang].text))) return null;
   browser ||= await chromium.launch({ channel: config.browserChannel, headless: true });
   const directory = path.join(config.dataDir, 'media');

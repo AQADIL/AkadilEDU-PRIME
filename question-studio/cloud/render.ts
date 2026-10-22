@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { CloudYieldError } from './provider.js';
 import { diagramSchema, languages, type Diagram, type Language, type StoredQuestion } from '../src/schema.js';
 import { statementPresentation } from '../src/statementPresentation.js';
+import { questionPresentationIssues } from '../src/questionPresentation.js';
 import { layoutStatement, MathLayoutError } from './math-layout.js';
 import { combineQuestionPng, cropQuestionPng } from './png.js';
 
@@ -311,6 +312,8 @@ function renderImageQuestion(question: StoredQuestion): Record<Language, string>
 }
 
 export function renderQuestion(question: StoredQuestion): Record<Language, string> | null {
+  const issues = questionPresentationIssues(question.translations);
+  if (issues.length) throw new QuestionRenderError(issues.join('; '));
   try { return renderImageQuestion(question); }
   catch (error) {
     if (error instanceof MathLayoutError) throw new QuestionRenderError(error.message);

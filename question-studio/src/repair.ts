@@ -59,8 +59,10 @@ export async function repairQuestion(question: StoredQuestion, shouldPause: () =
     if (shouldPause()) throw new RequestPausedError();
     const candidate = repair.candidate;
     const { correctOption: _answer, ...reviewInput } = candidate;
+    const { correctOption: _originalAnswer, ...originalQuestion } = questionInput(question);
     await event(`Повторная проверка ${question.id.slice(0, 8)}: ${config.reviewModel}.`, 'info', question.topic);
     const reviewed = await runStructured('review', reviewPrompt, {
+      originalQuestion, changesRequested: question.validation.issues,
       questions: [{ ...reviewInput, index: 0 }], topics: [{ id: topic.id, path: topic.path }],
       history: state.questions.filter(item => item.id !== question.id && item.topic === question.topic && item.validation.passed)
         .slice(-40).map(item => item.translations.kk.text),

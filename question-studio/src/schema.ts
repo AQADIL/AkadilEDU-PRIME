@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { questionPresentationIssues } from './questionPresentation.js';
 
 export const languages = ['kk', 'ru', 'en'] as const;
 export type Language = typeof languages[number];
@@ -283,7 +284,7 @@ export interface StudioState {
 
 const latex = /\\[A-Za-z]+|\\[()[\]]|\$\$?|\^\{|_\{/;
 export function contentIssues(question: GeneratedQuestion): string[] {
-  const issues: string[] = [];
+  const issues = questionPresentationIssues(question.translations);
   for (const language of languages) {
     const t = question.translations[language];
     const outsideMath = t.text.replace(/\$\$[\s\S]*?\$\$|\$[^$]*?\$/g, '');
