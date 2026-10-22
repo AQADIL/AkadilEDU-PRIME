@@ -17,7 +17,7 @@ const env = z.object({
   STUDIO_BUDGET_USD: z.coerce.number().positive().max(50),
   STUDIO_PER_TOPIC: z.coerce.number().int().min(10).max(200),
   STUDIO_BATCH_SIZE: z.coerce.number().int().min(1).max(5),
-  STUDIO_CONCURRENCY: z.coerce.number().int().min(1).max(16),
+  STUDIO_CONCURRENCY: z.coerce.number().int().min(1).max(24),
   STUDIO_REPAIR_CONCURRENCY: z.coerce.number().int().min(1).max(16).optional(),
   STUDIO_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(2000).max(32000),
   STUDIO_API_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(5),
