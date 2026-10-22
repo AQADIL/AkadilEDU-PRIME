@@ -21,7 +21,8 @@ function validQuestionContent(content) {
     && (content.imageContainsStatement === undefined || typeof content.imageContainsStatement === 'boolean')
     && (content.imageContainsStatement !== false || content.text.trim())
     && Array.isArray(content.options) && content.options.length === 4
-    && content.options.every((option) => typeof option === 'string' && option.trim() && option.length <= 500)
+    && content.options.every((option) => typeof option === 'string' && option.trim()
+      && option.length <= 64 && !/[\r\n\u0085\u2028\u2029]/u.test(option))
     && ['explanation', 'hint'].every((field) => content[field] === undefined
       || (typeof content[field] === 'string' && content[field].length <= 3500)));
 }

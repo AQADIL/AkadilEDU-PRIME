@@ -94,8 +94,9 @@ export function validateQuestion(questionData) {
   }
 
   if (!Array.isArray(questionData.options) || questionData.options.length !== 4
-    || !questionData.options.every(option => typeof option === 'string' && option.trim() && option.length <= 500)) {
-    throw new Error('Enter exactly four nonempty answer options.');
+    || !questionData.options.every(option => typeof option === 'string' && option.trim()
+      && option.length <= 64 && !/[\r\n\u0085\u2028\u2029]/u.test(option))) {
+    throw new Error('Enter exactly four nonempty, single-line answer options of at most 64 characters each.');
   }
   if (!Number.isInteger(questionData.correctOption)
     || questionData.correctOption < 0 || questionData.correctOption >= questionData.options.length) {
