@@ -14,7 +14,7 @@
 
 Daily quizzes, personal review and topic practice connect to one question bank. Administrators manage the content and schedule through a browser or Telegram Mini App. A separate Question Studio creates, checks and repairs multilingual practice material through the API.
 
-[Admin workspace](https://akadiledu-bot.web.app/) · [Setup](QUICKSTART.md) · [Question Studio](question-studio/README.md) · [Security](SECURITY.md) · [License](LICENSE)
+[Admin workspace](https://akadiledu-bot.web.app/) · [Setup](#authorized-development) · [Question Studio](question-studio/README.md) · [Security](SECURITY.md) · [License](LICENSE)
 
 > **Intellectual property - all rights reserved.** Copyright © 2026 Akadil Alish. The original source code, documentation and brand assets are proprietary. Use, copying, modification, redistribution and deployment require prior written permission, subject to the exceptions and preserved rights in [LICENSE](LICENSE). Public repository visibility does not grant a reuse licence.
 
@@ -142,7 +142,7 @@ npm --prefix admin-mini-app ci
 npm --prefix question-studio ci
 ```
 
-Copy the relevant `.env.example` files to local `.env` files and fill in the real values. [QUICKSTART.md](QUICKSTART.md) covers authentication, secrets, administrator setup and deployment order.
+Copy the relevant `.env.example` files to local `.env` files and fill in the real values. The deployment section below covers authentication, secrets, administrator setup and deployment order.
 
 | Configuration template | Scope |
 | --- | --- |
@@ -167,6 +167,77 @@ Secrets for deployed functions belong in Secret Manager. Private API keys, bot t
 | `npm --prefix question-studio start` | Start Studio at its configured loopback origin |
 
 There is no root npm workspace or combined root check command. Dependency versions are pinned in each component's lockfile.
+
+</details>
+
+### Deployment and first-run setup
+
+<details>
+<summary><strong>Configure services, bootstrap access and deploy</strong></summary>
+
+#### Configuration
+
+- Set the actual bot identity, HTTPS deep-link base, Mini App address and Firebase project values.
+- For local Firebase Admin access, set `GOOGLE_APPLICATION_CREDENTIALS` to a credential file outside version control, or configure Application Default Credentials. Deployed Functions use the runtime identity.
+- In Functions, use `RTDB_URL` and `DEPLOY_REGION`. The browser's `VITE_FIREBASE_FUNCTIONS_REGION` must match the deployed region.
+- Set `SCHEDULER_CRON` to check campaigns every minute. Individual campaign times and time zones are managed in the admin interface.
+- Set all authentication lifetime and rate-limit values listed in the templates. Browser OTP attempts are bounded by `BROWSER_AUTH_OTP_MAX_ATTEMPTS`.
+
+#### Prepare Firebase identity and secrets
+
+Initialize Firebase Authentication for custom-token sign-in and authorize the admin application's domains. Administrator access uses Telegram identity; email or anonymous sign-in is not required.
+
+For deployed Functions, set the following secrets in the intended project:
+
+```powershell
+firebase functions:secrets:set BOT_TOKEN --project $env:FIREBASE_PROJECT_ID
+firebase functions:secrets:set TELEGRAM_WEBHOOK_SECRET --project $env:FIREBASE_PROJECT_ID
+firebase functions:secrets:set BROWSER_AUTH_OTP_PEPPER --project $env:FIREBASE_PROJECT_ID
+```
+
+Use a random OTP pepper containing at least 32 bytes of entropy. Keep these secrets out of `functions/.env`. The local bot's root `.env` needs matching webhook and OTP secrets when those features are used.
+
+The deployed runtime identity must be able to sign Firebase custom tokens. Configure the required `iam.serviceAccounts.signBlob` permission, using `roles/iam.serviceAccountTokenCreator` on its own service account where appropriate for the selected deployment identity.
+
+#### Bootstrap the first administrator
+
+For a database without administrators, put your Telegram user ID in `ADMIN_BOOTSTRAP_TELEGRAM_ID` and run:
+
+```powershell
+node scripts/add-admin.js
+```
+
+This privileged script refuses to modify an existing administrator collection. Keep database rules closed; do not grant public write access to bootstrap an account.
+
+#### Check and deploy
+
+```powershell
+npm --prefix admin-mini-app run lint
+npm --prefix admin-mini-app run build
+npm --prefix question-studio run check
+npm --prefix question-studio run cloud:check
+firebase deploy --only database,storage,functions,hosting --project $env:FIREBASE_PROJECT_ID
+```
+
+The Firebase CLI reads the target project ID from the PowerShell environment in these commands; set it explicitly before running them. The Functions predeploy hook packages the current `bot/` source automatically. Build the admin application before deploying: Hosting serves `admin-mini-app/dist` and has no build hook.
+
+#### Connect Telegram
+
+Set the root `.env` value `TELEGRAM_WEBHOOK_URL` to the deployed `telegramWebhook` function, then register it:
+
+```powershell
+npm --prefix bot run webhook:register
+```
+
+Add the bot to the destination channel as an administrator with posting rights. Open `/admin` in the bot, or sign in through the configured admin browser URL with the Telegram-delivered code. Use **Stay logged in** if persistent browser access is wanted.
+
+#### Enable a real campaign
+
+Create or publish valid questions, then configure the channel, language, time zone, start time and question timing in **Campaigns**. Verify channel permissions and enable the campaign. Without an enabled campaign and suitable published questions, nothing is automatically posted.
+
+For development without an active Telegram webhook, `npm --prefix bot start` uses polling. The admin development server starts with `npm --prefix admin-mini-app run dev`; Studio uses its own explicitly configured loopback host, port and public origin.
+
+For generation on Google Apps Script, follow the [cloud worker guide](question-studio/cloud/README.md). Pause and migrate the complete accounting state before switching execution ownership. Never run local and cloud generation against separate copies of the same ledger.
 
 </details>
 

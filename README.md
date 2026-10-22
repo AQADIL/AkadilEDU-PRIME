@@ -165,7 +165,7 @@ npm --prefix functions run prepare:bot
 
 For local development without an active Telegram webhook, `npm --prefix bot start` uses polling. Deployed operation uses the configured webhook and scheduler. A real campaign also requires published questions and channel posting rights. There is no combined root npm test command; UI checks and manual Telegram scenarios cover different parts of the system.
 
-Follow [QUICKSTART.md](QUICKSTART.md) for complete environment, administrator, secret and deployment steps. The [product guide](README.product.md) describes additional tooling; the question-filling script and Question Studio are outside the proposed diploma scope.
+Follow the [deployment guide](README.product.md#deployment-and-first-run-setup) for complete environment, administrator, secret and deployment steps. The [product guide](README.product.md) describes additional tooling; the question-filling script and Question Studio are outside the proposed diploma scope.
 
 
 ## Submitted version

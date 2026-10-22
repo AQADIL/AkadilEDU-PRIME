@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-labelledby="title desc">
-  <title id="title">AkadilEDU PRIME</title>
-  <desc id="desc">An angular A with an open-book crossbar and a lime prime mark.</desc>
-  <rect width="192" height="192" rx="44" fill="#101310"/>
-  <path d="M42 144 91 43 140 144" fill="none" stroke="#f2f3eb" stroke-width="14" stroke-linecap="square" stroke-linejoin="round"/>
-  <path d="M63 108 91 116 119 108" fill="none" stroke="#c1ed82" stroke-width="9" stroke-linejoin="round"/>
-  <path d="m143 40-7 23" fill="none" stroke="#c1ed82" stroke-width="9"/>
-</svg>
