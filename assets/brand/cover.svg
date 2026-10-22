@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="680" viewBox="0 0 1400 680" role="img" aria-labelledby="title desc">
+  <title id="title">AkadilEDU PRIME — Practice. Understand. Progress.</title>
+  <desc id="desc">Mathematics practice for UNT. Channel quizzes lead to personal mistake review and focused practice. Kazakh, Russian and English.</desc>
+  <rect width="1400" height="680" fill="#101310"/>
+  <path d="M0 1H1400M0 679H1400" stroke="#30372d"/>
+  <g transform="translate(64 53)">
+    <path d="M4 56 28 6 52 56" fill="none" stroke="#f2f3eb" stroke-width="7" stroke-linejoin="round"/>
+    <path d="m14 38 14 4 14-4" fill="none" stroke="#c1ed82" stroke-width="4.5"/>
+    <path d="m62 4-4 13" stroke="#c1ed82" stroke-width="4.5"/>
+    <text x="88" y="41" fill="#f2f3eb" font-family="Segoe UI,Arial,sans-serif" font-size="38" font-weight="600" letter-spacing="-1.5">AkadilEDU</text>
+    <path d="M292 8V49" stroke="#434a3e"/>
+    <text x="312" y="35" fill="#c1ed82" font-family="Segoe UI,Arial,sans-serif" font-size="17" letter-spacing="4">PRIME</text>
+  </g>
+  <text x="64" y="205" fill="#a0ad95" font-family="Segoe UI,Arial,sans-serif" font-size="18" letter-spacing="2.5">MATHEMATICS · ҰБТ / ЕНТ / UNT</text>
+  <g fill="#f2f3eb" font-family="Segoe UI,Arial,sans-serif" font-size="76" font-weight="600" letter-spacing="-3.2">
+    <text x="60" y="300">Practice.</text>
+    <text x="60" y="389">Understand.</text>
+    <text x="60" y="478" fill="#c1ed82">Progress.</text>
+  </g>
+  <g fill="none" stroke-linejoin="round">
+    <path d="M938 154 758 476H1255Z" stroke="#46553d" stroke-width="2"/>
+    <path d="m938 154 108 322M758 476l288-210M1255 476 845 320" stroke="#2c3627" stroke-width="1.5"/>
+    <path d="m845 320 93-166 108 112v210Z" stroke="#789c58" stroke-width="2"/>
+    <path d="M758 476h288V266" stroke="#c1ed82" stroke-width="4"/>
+    <path d="m1031 476v-15h15" stroke="#c1ed82" stroke-width="2"/>
+    <path d="M957 190a41 41 0 0 0-37 0" stroke="#789c58" stroke-width="2"/>
+  </g>
+  <g fill="#c1ed82">
+    <circle cx="938" cy="154" r="5"/>
+    <circle cx="758" cy="476" r="5"/>
+    <circle cx="1255" cy="476" r="5"/>
+    <circle cx="1046" cy="266" r="4"/>
+    <circle cx="1046" cy="476" r="5"/>
+  </g>
+  <g fill="#a0ad95" font-family="Segoe UI,Arial,sans-serif" font-size="19" font-style="italic">
+    <text x="931" y="131">A</text>
+    <text x="729" y="491">B</text>
+    <text x="1271" y="491">C</text>
+    <text x="1055" y="256">P</text>
+  </g>
+  <path d="M64 546H1336" stroke="#303b2b"/>
+  <g font-family="Segoe UI,Arial,sans-serif" font-size="20">
+    <text x="64" y="601" fill="#c1ed82">01</text>
+    <text x="106" y="601" fill="#e2e7db">Channel quiz</text>
+    <path d="M293 594h64m-8-6 8 6-8 6" fill="none" stroke="#66765b" stroke-width="1.5"/>
+    <text x="389" y="601" fill="#c1ed82">02</text>
+    <text x="431" y="601" fill="#e2e7db">Mistake review</text>
+    <path d="M641 594h64m-8-6 8 6-8 6" fill="none" stroke="#66765b" stroke-width="1.5"/>
+    <text x="737" y="601" fill="#c1ed82">03</text>
+    <text x="779" y="601" fill="#e2e7db">Focused practice</text>
+    <text x="1336" y="601" text-anchor="end" fill="#a0ad95">ҚАЗ · РУС · ENG</text>
+  </g>
+</svg>
