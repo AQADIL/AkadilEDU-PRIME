@@ -9,6 +9,7 @@
   },
   "scripts": {
     "start": "tsx src/server.ts",
+    "agent": "tsx src/agent.ts",
     "check": "tsc --noEmit",
     "cloud:check": "tsc --noEmit -p cloud/tsconfig.json",
     "cloud:build": "node cloud/build.mjs"

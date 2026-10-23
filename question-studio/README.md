@@ -2,6 +2,12 @@
 
 A local browser workspace for generating and reviewing original UNT mathematics practice questions through the OpenAI API. It uses the project's existing Firebase Realtime Database and Cloud Storage.
 
+## External authoring without an OpenAI API key
+
+The [cloud authoring handoff](agent/DOT_HANDOFF.md) describes how an agent writes and independently reviews questions using its own available capabilities. `npm run agent -- next` reads the real Firebase queue; the other agent commands validate, render, publish and audit each topic. This mode loads only `.env.agent`, uses Firebase credentials from the cloud environment, and never imports the paid API provider. Plans, pending batches and publication receipts persist in Firebase so another cloud session can continue.
+
+Set `STUDIO_API_ENABLED=false` in the local `.env` to disable paid generation. The agent bridge does not start Dot or configure its cloud access or schedule. Those must be established in Dot. The former local dashboard does not display this separate authoring queue; use the agent's `status` and `next` commands.
+
 ## Run
 
 Install dependencies with `npm ci` inside `question-studio`. Copy `.env.example` to `.env` and supply all required values. `STUDIO_ENV_FILE` can reference the existing project's environment file for Firebase credentials and the API key. Studio settings take precedence over that file.
