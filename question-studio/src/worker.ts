@@ -306,6 +306,7 @@ async function serialLoop() {
   }
 }
 export function startWorker() {
+  if (!config.apiEnabled) throw new Error('Платный API отключён. Используйте режим внешнего автора.');
   if (config.executionOwner === 'google-apps-script') throw new Error('This run belongs to the cloud worker; local generation is disabled');
   if (running) throw new Error('Генерация уже выполняется');
   pauseRequested = false;

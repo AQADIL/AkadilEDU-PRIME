@@ -8,6 +8,7 @@ loadEnv({ path: path.join(studioRoot, '.env'), quiet: true });
 if (process.env.STUDIO_ENV_FILE) loadEnv({ path: process.env.STUDIO_ENV_FILE, quiet: true });
 
 const env = z.object({
+  STUDIO_API_ENABLED: z.enum(['true', 'false']).default('true'),
   STUDIO_EXECUTION_OWNER: z.enum(['local', 'google-apps-script']).optional(),
   STUDIO_HOST: z.enum(['127.0.0.1', '::1']),
   STUDIO_PORT: z.coerce.number().int().min(1024).max(65535),
@@ -89,6 +90,7 @@ if (Object.values(legacyPricing).some(value => value !== undefined)
   throw new Error('Legacy model pricing requires OPENAI_LEGACY_MODEL and input, cached-input, cache-write and output legacy prices');
 }
 export const config = {
+  apiEnabled: env.STUDIO_API_ENABLED === 'true',
   executionOwner: env.STUDIO_EXECUTION_OWNER,
   host: env.STUDIO_HOST,
   port: env.STUDIO_PORT,

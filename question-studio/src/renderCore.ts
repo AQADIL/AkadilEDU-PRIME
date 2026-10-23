@@ -1,0 +1,125 @@
+import path from 'node:path';
+import { mkdir } from 'node:fs/promises';
+import { chromium, type Browser } from 'playwright';
+import sharp from 'sharp';
+import { languages, type Language, type StoredQuestion } from './schema.js';
+import { diagramSvg } from './diagram.js';
+import { arrangeDiagramLabels } from './diagramLayout.js';
+import { statementPresentation } from './statementPresentation.js';
+import { questionPresentationIssues } from './questionPresentation.js';
+
+let browser: Browser | undefined;
+export class QuestionRenderError extends Error {}
+export class DiagramLayoutError extends QuestionRenderError {}
+export class RenderRetryError extends Error {
+  constructor(readonly retryAfterMs: number) {
+    super('Создание изображения временно недоступно. Сохранённое задание будет отрисовано повторно без нового запроса к модели.');
+  }
+}
+const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+export async function closeRenderer() { const previous = browser; browser = undefined; await previous?.close(); }
+
+export interface RenderSettings {
+  origin: string;
+  studioRoot: string;
+  dataDir: string;
+  browserChannel?: string;
+  recoveryBackoffMs: number;
+}
+export async function renderQuestionWithSettings(question: StoredQuestion, config: RenderSettings): Promise<Record<Language, string> | null> {
+  const { studioRoot } = config;
+  const issues = questionPresentationIssues(question.translations, question.diagram);
+  if (issues.length) throw new QuestionRenderError(issues.join('; '));
+  if (!question.diagram && !languages.some(lang => /\$|\\[A-Za-z]+/.test(question.translations[lang].text))) return null;
+  browser ||= await chromium.launch({ channel: config.browserChannel, headless: true });
+  const directory = path.join(config.dataDir, 'media');
+  await mkdir(directory, { recursive: true });
+  const result = {} as Record<Language, string>;
+  const rendered = new Map<string, string>();
+  for (const language of languages) {
+    const translation = question.translations[language];
+    const presentation = statementPresentation(translation.text);
+    const text = presentation.imageText;
+    const hasFormula = Boolean(text);
+    const drawing = question.diagram ? diagramSvg(question.diagram, language) : '';
+    const signature = JSON.stringify([text, drawing]);
+    const existing = rendered.get(signature);
+    translation.imageContainsStatement = presentation.containsStatement;
+    translation.displayText = presentation.displayText;
+    if (existing) {
+      result[language] = existing;
+      translation.localImageUrl = `/media/${path.basename(existing)}`;
+      continue;
+    }
+    const page = await browser.newPage({ viewport: { width: 840, height: 1000 }, deviceScaleFactor: 1.5 });
+    try {
+      await page.route('**/*', async route => {
+        const url = new URL(route.request().url());
+        if (url.origin === config.origin && url.pathname.startsWith('/vendor/katex/')) {
+          const relative = decodeURIComponent(url.pathname.slice('/vendor/katex/'.length));
+          const root = path.join(studioRoot, 'node_modules/katex/dist');
+          const filename = path.resolve(root, relative);
+          const withinRoot = path.relative(root, filename);
+          if (!withinRoot || withinRoot.startsWith('..') || path.isAbsolute(withinRoot)) {
+            await route.abort();
+            return;
+          }
+          await route.fulfill({ path: filename });
+        } else await route.abort();
+      });
+      await page.setContent(`<!doctype html><html lang="${language}"><head><meta charset="utf-8">
+        ${hasFormula ? `<link rel="stylesheet" href="${config.origin}/vendor/katex/katex.min.css">` : ''}
+        <style>body{margin:0;background:white;color:#182840;font:22px/1.65 Arial,sans-serif}
+        article{box-sizing:border-box;width:840px;padding:36px}p{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}
+        svg{display:block;width:100%}#statement+svg{margin-top:24px}
+        .katex{font-size:1.1em}</style></head><body><article>${hasFormula ? `<p id="statement">${escape(text)}</p>` : ''}
+        ${drawing}</article></body></html>`, { waitUntil: 'networkidle' });
+      if (hasFormula && /\$/.test(text)) {
+        await page.addScriptTag({ path: path.join(studioRoot, 'node_modules/katex/dist/katex.min.js') });
+        await page.addScriptTag({ path: path.join(studioRoot, 'node_modules/katex/dist/contrib/auto-render.min.js') });
+        try { await page.evaluate(() => {
+          const renderer = (globalThis as unknown as { renderMathInElement: (element: Element, options: object) => void }).renderMathInElement;
+          renderer(document.getElementById('statement')!, {
+            delimiters: [{ left: '$$', right: '$$', display: true }, { left: '$', right: '$', display: false }],
+            throwOnError: true, trust: false, maxExpand: 1000, strict: 'error',
+            errorCallback(message: string) { throw new Error(message); },
+          });
+        }); } catch (error) {
+          if (error instanceof Error && /KaTeX parse error|ParseError/.test(error.message)) {
+            throw new QuestionRenderError('Некорректная формула LaTeX: ' + error.message.slice(0, 300));
+          }
+          throw error;
+        }
+      }
+      await page.evaluate(() => document.fonts.ready);
+      if (question.diagram) {
+        try { await page.evaluate(arrangeDiagramLabels); }
+        catch (error) {
+          if (error instanceof Error && /Diagram labels? (overlap|is too long)/.test(error.message)) {
+            throw new DiagramLayoutError('Подписи чертежа перекрываются или не помещаются в изображение.');
+          }
+          throw error;
+        }
+      }
+      const height = await page.locator('article').evaluate(element => element.scrollHeight);
+      if (height > 6000) throw new QuestionRenderError('Question image exceeds readable size');
+      const filename = path.join(directory, `${question.id}-${language}.png`);
+      const pixels = await page.locator('article').screenshot();
+      await sharp(pixels)
+        .trim({ background: 'white', threshold: 10, lineArt: true })
+        .extend({ top: 24, bottom: 24, left: 24, right: 24, background: 'white' })
+        .png({ compressionLevel: 9, palette: true, colours: 64 }).toFile(filename);
+      result[language] = filename;
+      rendered.set(signature, filename);
+      translation.localImageUrl = `/media/${path.basename(filename)}`;
+    } catch (error) {
+      if (!(error instanceof QuestionRenderError) && error instanceof Error
+        && /Timeout|Target closed|Target page, context or browser has been closed|browser has been disconnected|Protocol error/i.test(error.message)) {
+        await closeRenderer().catch(() => undefined);
+        throw new RenderRetryError(config.recoveryBackoffMs);
+      }
+      throw error;
+    } finally { await page.close().catch(() => undefined); }
+  }
+  return result;
+}

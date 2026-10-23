@@ -297,6 +297,7 @@ export async function runStructured<T>(kind: ApiCall['kind'], instructions: stri
     data: T; responseId: string; callId: string; model: string;
     sources: ReferenceSource[]; webSearchCalls: number; webToolCalls: number;
   }> {
+  if (!config.apiEnabled) throw new Error('Paid API requests are disabled in this workspace');
   for (const recorded of state.calls) assertSettledCallWithinReservation(recorded);
   const jsonSchema = z.toJSONSchema(schema);
   delete jsonSchema.$schema;
