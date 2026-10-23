@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 const execute = promisify(execFile);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const forbiddenPaths = [
+  /^question-studio(?:\/|$)/,
   /(?:^|\/)\.env(?:\.|$)(?!example$)/,
   /(?:^|\/)(?:node_modules|dist|build|coverage|\.data|\.cloud-build|\.firebase|\.playwright-cli)(?:\/|$)/,
   /^functions\/bot(?:\/|$)/,

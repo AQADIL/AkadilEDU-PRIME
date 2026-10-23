@@ -14,7 +14,7 @@
 
 **A Telegram learning loop for UNT mathematics: answer in the channel, understand your mistakes, practise what you need.**
 
-Daily quizzes, personal review and topic practice connect to one question bank. Administrators manage the content and schedule through a browser or Telegram Mini App. A separate Question Studio creates, checks and repairs multilingual practice material through the API.
+Daily quizzes, personal review and topic practice connect to one question bank. Administrators manage the content and schedule through a browser or Telegram Mini App.
 
 <p align="center"><a href="#the-learning-experience">Student experience</a> · <a href="#technologies">Technologies</a> · <a href="#deployment-and-first-run-setup">Getting started</a> · <a href="#akadiledu-ecosystem">Ecosystem</a> · <a href="SECURITY.md">Security</a> · <a href="LICENSE">Licence</a></p>
 
@@ -116,27 +116,20 @@ flowchart LR
     E --> F[Similar topic practice]
 ```
 
-## Three connected workspaces
+## Connected workspaces
 
 | Workspace | Purpose | Implementation |
 | --- | --- | --- |
 | **Telegram bot** | Channel answers, personal review, practice and statistics | Node.js, grammY, Firebase Admin SDK |
 | **Admin Mini App** | Questions, topics, users and campaign configuration | React 19, Vite, Tailwind CSS, Framer Motion |
-| **Question Studio** | API authoring, independent review, correction, previews and costs | TypeScript, Zod, OpenAI API, KaTeX, Playwright, Sharp |
 
 The bot and question content support **Kazakh (`kk`), Russian (`ru`) and English (`en`)**. Bot interface translations live in [`bot/i18n.js`](bot/i18n.js). The admin interface is in English.
 
-## Content that students can read
+## Question content
 
-Every generated question contains three equivalent statements, four answer choices, a hint and an explanation. A separate review request independently solves and checks the work before publication. Rejected questions receive concrete reviewer feedback, enter a bounded repair queue and undergo another review.
+Questions support equivalent Kazakh, Russian and English statements, four answer choices, a hint and an explanation. Question images can display formulas or geometric figures; language-independent visuals can be shared across translations. Answer options, hints and explanations use plain text.
 
-- **Readable mathematics.** Dense fractions, compound logarithm bases and other difficult layouts are typeset into statement images.
-- **One visual when possible.** Language-independent formulas and geometry share an image; the instruction is translated separately. Separate images are produced only when the visible content needs translation.
-- **Compact choices.** Answer options stay on one line and contain at most 64 UTF-16 characters in every language. Options, hints and explanations remain plain text.
-- **Traceable publication.** Request IDs, model identities, review findings and correction history are retained. Only accepted content is eligible for publication.
-- **Real topic coverage.** Studio reads the live topic tree, selects exact `isLast === true` leaves and excludes the `RANDOM` service node. Targets vary by topic; difficulty planning aims approximately at 25% easy, 45% medium and 30% hard.
-
-AI review reduces errors; it does not certify mathematical correctness. These are original practice materials, not official National Testing Center exam questions.
+The topic tree identifies final topics with `isLast === true`; the `RANDOM` node is reserved for mixed practice. These are practice materials, not official National Testing Center exam questions.
 
 ## Technologies
 
@@ -150,11 +143,8 @@ AI review reduces errors; it does not certify mathematical correctness. These ar
 | Styling and interaction | Tailwind CSS, Framer Motion, Lucide | Responsive layouts, animations and icons |
 | Server and scheduling | Cloud Functions, Cloud Scheduler | Webhook handling, identity verification and timed quiz publication |
 | Data and hosting | Firebase | Realtime Database, Authentication, Cloud Storage and Hosting |
-| Content pipeline | TypeScript, Zod, OpenAI API | Structured question authoring, validation and independent review |
-| Mathematical media | KaTeX, Playwright, Sharp | Formula typesetting, browser rendering and image processing |
-| Cloud content worker | Google Apps Script, esbuild, clasp | Resumable content jobs and worker deployment |
 
-Exact dependency declarations: [bot](bot/package.json) · [functions](functions/package.json) · [admin app](admin-mini-app/package.json) · [Question Studio](question-studio/package.json). Each component has a lockfile recording resolved versions.
+Exact dependency declarations: [bot](bot/package.json) · [functions](functions/package.json) · [admin app](admin-mini-app/package.json). Each component has a lockfile recording resolved versions.
 
 </details>
 
@@ -175,16 +165,11 @@ flowchart TB
     ADMIN --> DATA
     BOT --> DATA
     CAM --> DATA
-    STUDIO[Question Studio] --> API[Author + independent reviewer]
-    API --> STUDIO
-    STUDIO --> DATA
-    STUDIO --> MEDIA[(Cloud Storage)]
+    ADMIN --> MEDIA[(Cloud Storage)]
     MEDIA --> TG
 ```
 
 **Realtime Database is the source of truth.** It stores topics, questions, campaigns, publications and attempts. Cloud Storage holds question images. Firebase Authentication identifies administrators; Cloud Functions handle privileged authentication, webhook delivery and scheduled publication. Hosting serves the admin application.
-
-Question Studio has two execution modes: a local Node.js worker and a separate [Google Apps Script worker](question-studio/cloud/README.md). Apps Script uses resumable timed steps and has daily runtime quotas. One authoritative worker owns a run at a time.
 
 ### Access and identity
 
@@ -208,8 +193,6 @@ See [SECURITY.md](SECURITY.md) for private reporting and responsible investigati
 | [`bot/`](bot/) | Telegram handlers, localization, question selection and channel scheduling |
 | [`functions/`](functions/) | Webhook, identity exchange, browser OTP and scheduled campaigns |
 | [`admin-mini-app/`](admin-mini-app/) | React administration interface |
-| [`question-studio/`](question-studio/) | Authoring/review pipeline, renderer and local browser workspace |
-| [`question-studio/cloud/`](question-studio/cloud/) | Apps Script worker, private UI and deployment tooling |
 | [`scripts/`](scripts/) | First-administrator bootstrap |
 | [`assets/brand/prime-transparent.png`](assets/brand/prime-transparent.png) | AkadilEDU PRIME logo with a transparent background |
 | [`database.rules.json`](database.rules.json), [`storage.rules`](storage.rules) | Client access rules |
@@ -224,14 +207,13 @@ See [SECURITY.md](SECURITY.md) for private reporting and responsible investigati
 
 Use these steps only with the owner's permission and your own authorized service configuration. There are no default administrator credentials or bundled production datasets.
 
-**Requirements:** Node.js 22.12 or newer in the Node.js 22 line, npm, a configured Firebase project and a Telegram bot. Studio additionally requires an API account and a supported local browser.
+**Requirements:** Node.js 22.12 or newer in the Node.js 22 line, npm, a configured Firebase project and a Telegram bot.
 
 ```powershell
 npm ci
 npm --prefix bot ci
 npm --prefix functions ci
 npm --prefix admin-mini-app ci
-npm --prefix question-studio ci
 ```
 
 Copy the relevant `.env.example` files to local `.env` files and fill in the real values. The deployment section below covers authentication, secrets, administrator setup and deployment order.
@@ -241,9 +223,8 @@ Copy the relevant `.env.example` files to local `.env` files and fill in the rea
 | [`.env.example`](.env.example) | Local bot, Firebase credentials, webhook and bootstrap |
 | [`functions/.env.example`](functions/.env.example) | Deployed function configuration and OTP limits |
 | [`admin-mini-app/.env.example`](admin-mini-app/.env.example) | Public browser Firebase configuration |
-| [`question-studio/.env.example`](question-studio/.env.example) | Models, prices, API budget, rendering and worker ownership |
 
-Secrets for deployed functions belong in Secret Manager. Private API keys, bot tokens and service-account credentials must never appear in `VITE_*` values. Local environment files, Studio state, credential files and generated deployment bundles are excluded from Git.
+Secrets for deployed functions belong in Secret Manager. Private API keys, bot tokens and service-account credentials must never appear in `VITE_*` values. Local environment files, credential files and generated deployment bundles are excluded from Git.
 
 ### Useful commands
 
@@ -254,11 +235,8 @@ Secrets for deployed functions belong in Secret Manager. Private API keys, bot t
 | `npm --prefix admin-mini-app run build` | Produce the admin Hosting bundle |
 | `npm --prefix bot start` | Run local Telegram polling, without an active webhook |
 | `npm --prefix functions run prepare:bot` | Package the current bot source for Functions |
-| `npm --prefix question-studio run check` | Type-check the local Studio |
-| `npm --prefix question-studio run cloud:check` | Type-check the Apps Script worker |
-| `npm --prefix question-studio start` | Start Studio at its configured loopback origin |
 
-Root tooling provides `npm run check` for source checks, the admin build, Studio types and Firebase access-rule tests. Install the root and component dependencies first; rule tests require Java 21 or newer. Dependency versions are pinned in each lockfile.
+Root tooling provides `npm run check` for source checks, the admin build and Firebase access-rule tests. Install the root and component dependencies first; rule tests require Java 21 or newer. Dependency versions are pinned in each lockfile.
 
 </details>
 
@@ -306,8 +284,6 @@ This privileged script refuses to modify an existing administrator collection. K
 ```powershell
 npm --prefix admin-mini-app run lint
 npm --prefix admin-mini-app run build
-npm --prefix question-studio run check
-npm --prefix question-studio run cloud:check
 firebase deploy --only database,storage,functions,hosting --project $env:FIREBASE_PROJECT_ID
 ```
 
@@ -327,22 +303,7 @@ Add the bot to the destination channel as an administrator with posting rights. 
 
 Create or publish valid questions, then configure the channel, language, time zone, start time and question timing in **Campaigns**. Verify channel permissions and enable the campaign. Without an enabled campaign and suitable published questions, nothing is automatically posted.
 
-For development without an active Telegram webhook, `npm --prefix bot start` uses polling. The admin development server starts with `npm --prefix admin-mini-app run dev`; Studio uses its own explicitly configured loopback host, port and public origin.
-
-For generation on Google Apps Script, follow the [cloud worker guide](question-studio/cloud/README.md). Pause and migrate the complete accounting state before switching execution ownership. Never run local and cloud generation against separate copies of the same ledger.
-
-</details>
-
-## Spending and recovery
-
-<details>
-<summary><strong>Content-tool budgets, worker limits and recovery behaviour</strong></summary>
-
-Studio persists a conservative reservation **before** every paid API request. Authoring, reviews, research and repairs share one run budget, with a configured maximum of **$50**. Recorded usage replaces settled reservations; uncertain charges retain their full reserve. New work is admitted only when its maximum reserved cost fits the remaining budget.
-
-Local generation supports up to 16 concurrent jobs with serialized budget admission. Known response IDs are retrieved again after connection failures. Terminal responses without usage are isolated with their reserve intact, allowing other work to continue. Content corrections and retries are bounded; authentication or inconsistent accounting can still require intervention.
-
-The API limit belongs to this Studio run. It is not an account-wide cap and does not cover Firebase charges. Apps Script runtime quotas and provider rate limits remain separate. See [Studio operations](question-studio/README.md#costs-and-recovery) for the complete behavior.
+For development without an active Telegram webhook, `npm --prefix bot start` uses polling. The admin development server starts with `npm --prefix admin-mini-app run dev`.
 
 </details>
 
@@ -355,7 +316,6 @@ GitHub Actions runs the following gates for pull requests, pushes to `main` and 
 | Source security | Credential patterns, private deployment destinations, JavaScript syntax, JSON/lockfile consistency and documentation links |
 | Admin checks | ESLint, a compile build and production dependency audit |
 | Backend checks | Bot/Functions installation, deployment packaging and production dependency audits |
-| Studio checks | Local and Apps Script TypeScript checks and a production dependency audit |
 | Access rules | Ten Realtime Database/Storage tests in isolated `demo-*` emulators and a tooling dependency audit |
 
 The dependency gates reject high and critical findings in their configured scope. Dependabot proposes weekly updates for the npm manifests and pinned Actions.

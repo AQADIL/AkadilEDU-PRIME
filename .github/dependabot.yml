@@ -11,7 +11,6 @@ updates:
       - /admin-mini-app
       - /bot
       - /functions
-      - /question-studio
     schedule:
       interval: weekly
     open-pull-requests-limit: 5

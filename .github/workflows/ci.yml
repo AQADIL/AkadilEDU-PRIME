@@ -73,26 +73,6 @@ jobs:
       - run: npm --prefix bot audit --omit=dev --audit-level=high
       - run: npm --prefix functions audit --omit=dev --audit-level=high
 
-  studio:
-    name: Studio checks
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: question-studio/package-lock.json
-      - run: npm --prefix question-studio ci
-      - run: npm --prefix question-studio run check
-      - run: npm --prefix question-studio run cloud:check
-      - run: npm --prefix question-studio audit --omit=dev --audit-level=high
-
   rules:
     name: Access rules
     runs-on: ubuntu-24.04
@@ -116,7 +96,7 @@ jobs:
 
   deploy:
     name: Production deployment
-    needs: [source, admin, backend, studio, rules]
+    needs: [source, admin, backend, rules]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     timeout-minutes: 45

@@ -158,7 +158,7 @@ This is an individual diploma project. Tasks are assigned to the student. Superv
 
 ### Boundaries and limitations
 
-The two applications currently have separate identity and progress records. Existing administrative AI tools assist with content workflows; they are not the proposed student learning-plan service. The diploma scope excludes the existing question-filling script and Question Studio as research contributions. Official UNT question ownership, guaranteed admission results, a new foundation model and universal offline media access are outside the stated scope.
+The two applications currently have separate identity and progress records. Existing administrative AI tools assist with content workflows; they are not the proposed student learning-plan service. Official UNT question ownership, guaranteed admission results, a new foundation model and universal offline media access are outside the stated scope.
 
 Learner records and assessment data must be handled with appropriate access controls. The AI component must handle insufficient evidence and invalid recommendations explicitly, and human review remains necessary for educational content and interpretation.
 
@@ -223,9 +223,9 @@ npm --prefix admin-mini-app run build
 npm --prefix functions run prepare:bot
 ```
 
-For local development without an active Telegram webhook, `npm --prefix bot start` uses polling. Deployed operation uses the configured webhook and scheduler. A real campaign also requires published questions and channel posting rights. Root tooling provides `npm run check` for source checks, the admin build, Studio types and Firebase rule tests; rule tests require Java 21 or newer. Connected Telegram scenarios remain separate operator checks.
+For local development without an active Telegram webhook, `npm --prefix bot start` uses polling. Deployed operation uses the configured webhook and scheduler. A real campaign also requires published questions and channel posting rights. Root tooling provides `npm run check` for source checks, the admin build and Firebase rule tests; rule tests require Java 21 or newer. Connected Telegram scenarios remain separate operator checks.
 
-Follow the [deployment guide](README.product.md#deployment-and-first-run-setup) for complete environment, administrator, secret and deployment steps. The [product guide](README.product.md) describes additional tooling; the question-filling script and Question Studio are outside the proposed diploma scope.
+Follow the [deployment guide](README.product.md#deployment-and-first-run-setup) for complete environment, administrator, secret and deployment steps. The [product guide](README.product.md) describes product operation and deployment.
 
 ## Submitted version
 
